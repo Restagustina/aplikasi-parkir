@@ -184,6 +184,10 @@ if st.session_state.page == "login" and st.session_state.user is None:
         # Tombol Login (ini adalah tombol submit form)
         submitted = st.form_submit_button("Login")
 
+        #Tombol Daftar
+        submitted = st.form_submit_button(("Daftar Akun Baru", key="goto_register"):
+        st.session_state.page = "register"
+
         # Logika Login HANYA berjalan ketika tombol submit form diklik
         if submitted:
             if db:
@@ -201,11 +205,6 @@ if st.session_state.page == "login" and st.session_state.user is None:
                     st.error("Email atau password salah!")
             else:
                 st.error("Koneksi ke database gagal.")
-
-    # Tombol Daftar Akun Baru (Diletakkan di luar form, tapi tepat di bawahnya)
-    if st.button("Daftar Akun Baru", key="goto_register"):
-        st.session_state.page = "register"
-    
     st.empty()
 
 # ---------------- REGISTER PAGE ----------------
