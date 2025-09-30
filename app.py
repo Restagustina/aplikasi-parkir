@@ -8,73 +8,33 @@ import hashlib
 import base64
 
 # ---------------- FIREBASE SETUP ----------------
-cred = credentials.Certificate(dict(st.secrets["firebase"]))
-if not firebase_admin._apps:
-    firebase_admin.initialize_app(cred, {
-        "storageBucket": "parkir-digital.appspot.com"
-    })
+# Pastikan st.secrets['firebase'] sudah diatur
+try:
+    cred = credentials.Certificate(dict(st.secrets["firebase"]))
+    if not firebase_admin._apps:
+        firebase_admin.initialize_app(cred, {
+            "storageBucket": "parkir-digital.appspot.com"
+        })
+    db = firestore.client()
+    bucket = storage.bucket()
+except Exception as e:
+    st.error(f"Gagal menginisialisasi Firebase. Pastikan st.secrets['firebase'] sudah benar. Error: {e}")
+    db = None
+    bucket = None
 
-db = firestore.client()
-bucket = storage.bucket()
-
-# ---------------- HELPER FUNCTIONS ----------------
+# ---------------- HELPER FUNCTIONS (Diperlukan untuk Logika Login) ----------------
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
-def register_user(nama, nim, email, password):
-    user_doc = db.collection("users").where("email", "==", email).stream()
-    for u in user_doc:
-        return None
-    new_user = {
-        "nama": nama,
-        "nim": nim,
-        "email": email,
-        "password_hash": hash_password(password)
-    }
-    user_ref = db.collection("users").add(new_user)
-    return user_ref[1].id
-
 def log_activity(user_id, action):
-    db.collection("log_activity").add({
-        "user_id": user_id,
-        "action": action,
-        "timestamp": firestore.SERVER_TIMESTAMP
-    })
-
-# def get_user_logs(user_id):
-#     docs = db.collection("log_activity").where("user_id", "==", user_id)\
-#         .order_by("timestamp", direction=firestore.Query.DESCENDING).stream()
-#     return [d.to_dict() for d in docs]
-def get_user_logs(user_id):
-    docs = db.collection("log_activity").where("user_id", "==", user_id).stream()
-    logs = [d.to_dict() for d in docs]
-    # Sort manual berdasarkan timestamp descending
-    logs_sorted = sorted(logs, key=lambda x: x['timestamp'] or 0, reverse=True)
-    return logs_sorted
-    
-
-def save_data_firestore(user_id, nama, nim, plat, jenis, foto_url, qr_url):
-    data = {
-        "user_id": user_id,
-        "nama": nama,
-        "nim": nim,
-        "plat": plat,
-        "jenis": jenis,
-        "foto_url": foto_url,
-        "qr_url": qr_url,
-        "created_at": firestore.SERVER_TIMESTAMP
-    }
-    db.collection("kendaraan").add(data)
-
-def upload_to_storage(file_path, filename):
-    blob = bucket.blob(filename)
-    blob.upload_from_filename(file_path)
-    blob.make_public()
-    return blob.public_url
-
-def get_user_vehicles(user_id):
-    docs = db.collection("kendaraan").where("user_id", "==", user_id).stream()
-    return [d.to_dict() for d in docs]
+    if db:
+        db.collection("log_activity").add({
+            "user_id": user_id,
+            "action": action,
+            "timestamp": firestore.SERVER_TIMESTAMP
+        })
+    else:
+        print(f"Log activity: {action} for user {user_id}")
 
 # ---------------- STREAMLIT APP ----------------
 st.set_page_config(page_title="Digital ID Parkir Mahasiswa", page_icon="🅿️", layout="wide")
@@ -83,38 +43,48 @@ st.set_page_config(page_title="Digital ID Parkir Mahasiswa", page_icon="🅿️"
 if "user" not in st.session_state:
     st.session_state.user = None
 if "page" not in st.session_state:
-    st.session_state.page = "login"  # login atau register
+    st.session_state.page = "login"
 
-# --- Fungsi untuk Background Image ---
+# --------------------------------------------------------------------------
+# --- FUNGSI & PANGGILAN BACKGROUND IMAGE (WAJIB DI AWAL SCRIPT) ---
+# --------------------------------------------------------------------------
+
+# Fungsi untuk mengkodekan gambar lokal ke Base64
 def get_base64(bin_file):
     with open(bin_file, 'rb') as f:
         data = f.read()
     return base64.b64encode(data).decode()
 
 def set_background(image_file):
-    bin_str = get_base64(image_file)
-    page_bg_img = f'''
-    <style>
-    .stApp {{
-        background-image: url("data:image/png;base64,{bin_str}");
-        background-size: cover;
-        background-repeat: no-repeat;
-        background-attachment: fixed;
-    }}
-    /* Menghapus header Streamlit bawaan (opsional, agar gambar full) */
-    .stApp > header {{
-        background-color: rgba(0,0,0,0); 
-    }}
-    </style>
-    '''
-    st.markdown(page_bg_img, unsafe_allow_html=True)
+    try:
+        bin_str = get_base64(image_file)
+        page_bg_img = f'''
+        <style>
+        /* Target Streamlit App Container */
+        [data-testid="stAppViewContainer"] {{
+            background-image: url("data:image/png;base64,{bin_str}");
+            background-size: cover;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+        }}
+        /* Menghapus header Streamlit bawaan */
+        [data-testid="stHeader"] {{
+            background-color: rgba(0,0,0,0);
+        }}
+        </style>
+        '''
+        st.markdown(page_bg_img, unsafe_allow_html=True)
+    except FileNotFoundError:
+        st.warning(f"PERINGATAN: File gambar '{image_file}' tidak ditemukan. Latar belakang tidak diterapkan.")
+
+# PANGGIL FUNGSI LATAR BELAKANG DI SINI
+# Ganti 'BG FASILKOM.png' jika format atau namanya berbeda
+set_background('BG FASILKOM.png')
 
 # ---------------- LOGIN PAGE ----------------
 if st.session_state.page == "login" and st.session_state.user is None:
     st.markdown("""
     <style>
-    /* CSS untuk background sudah dipindahkan ke fungsi set_background */
-
     /* Container untuk menengahkan login box di tengah halaman */
     .center-container {
         display: flex;
@@ -122,39 +92,40 @@ if st.session_state.page == "login" and st.session_state.user is None:
         align-items: center; /* Vertically center */
         height: 100vh; /* Tinggi penuh viewport */
         width: 100vw;
-        position: fixed; /* Tetapkan posisi agar tidak terpengaruh konten lain */
+        position: fixed; 
         top: 0;
         left: 0;
-        z-index: 9999; /* Pastikan di atas konten lain */
+        z-index: 9999; 
     }
     
     .login-box {
-        background-color: rgba(255, 255, 255, 0.9); /* Ubah ke putih transparan agar background terlihat */
+        background-color: rgba(255, 255, 255, 0.9); /* Putih transparan */
         padding: 30px;
         border-radius: 15px;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-        max-width: 400px; /* Batasi lebar box */
-        width: 90%; /* Agar responsif */
+        box-shadow: 0 8px 30px rgba(0,0,0,0.5); 
+        max-width: 400px; 
+        width: 90%; 
     }
     
-    .btn-register {
+    /* Target Tombol Login (pertama) */
+    div.stButton:nth-of-type(1) > button { 
+        width: 100%;
+        margin-top: 15px;
+    }
+
+    /* Target Tombol Daftar Akun Baru (kedua) */
+    div.stButton:nth-of-type(2) > button { 
         background-color:#ff4b4b; 
         color:white; 
         padding:10px 20px; 
         border-radius:10px; 
         border:none; 
         cursor:pointer;
-        width: 100%; /* Agar tombol selebar login box */
-        margin-top: 10px; /* Jarak dari tombol login */
-    }
-
-    /* CSS tambahan untuk meratakan tombol Daftar Akun Baru */
-    div.stButton > button:last-child {
-        width: 100%;
+        width: 100%; 
         margin-top: 10px;
     }
 
-    /* Streamlit input custom style (Opsional: agar input terlihat lebih baik di box) */
+    /* Streamlit input custom style */
     div[data-testid="stTextInput"] > div > div > input {
         border-radius: 8px;
         border: 1px solid #ccc;
@@ -172,22 +143,23 @@ if st.session_state.page == "login" and st.session_state.user is None:
     password = st.text_input("Password", type="password", key="login_password")
 
     if st.button("Login", key="btn_login"):
-        users = db.collection("users").where("email", "==", email).stream()
-        user_found = False
-        for u in users:
-            u_data = u.to_dict()
-            if u_data["password_hash"] == hash_password(password):
-                st.session_state.user = {"uid": u.id, **u_data}
-                log_activity(u.id, "login")
-                st.success(f"Selamat datang, {u_data['nama']}!")
-                user_found = True
-                break
-        if not user_found:
-            st.error("Email atau password salah!")
+        if db:
+            users = db.collection("users").where("email", "==", email).stream()
+            user_found = False
+            for u in users:
+                u_data = u.to_dict()
+                if u_data.get("password_hash") == hash_password(password):
+                    st.session_state.user = {"uid": u.id, **u_data}
+                    log_activity(u.id, "login")
+                    st.success(f"Selamat datang, {u_data.get('nama')}!")
+                    user_found = True
+                    break
+            if not user_found:
+                st.error("Email atau password salah!")
+        else:
+            st.error("Koneksi ke database gagal. Silahkan periksa konfigurasi Firebase Anda.")
 
-    # Tombol daftar merah
-    # Kita tidak bisa menerapkan .btn-register langsung ke st.button,
-    # jadi kita gunakan CSS selector untuk st.button terakhir (karena tombol Login sudah yang pertama)
+    # Tombol daftar
     if st.button("Daftar Akun Baru", key="goto_register"):
         st.session_state.page = "register"
     
