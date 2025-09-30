@@ -175,7 +175,7 @@ if st.session_state.page == "login" and st.session_state.user is None:
     st.empty() 
     
     # --- FORM (KOTAK LOGIN TUNGGAL) ---
-    with st.form("login_form", clear_on_submit=False):
+with st.form("login_form", clear_on_submit=False):
         st.markdown("### 🔑 Login Pengguna") 
 
         email = st.text_input("Email", key="login_email")
@@ -184,7 +184,7 @@ if st.session_state.page == "login" and st.session_state.user is None:
         # Tombol Login (ini adalah tombol submit form)
         submitted = st.form_submit_button("Login")
 
-        # Logika Login HANYA berjalan ketika tombol submit form diklik
+        # Logika Login HANYA berjalan ketika tombol submit form diklik (termasuk menekan ENTER)
         if submitted:
             if db:
                 users = db.collection("users").where("email", "==", email).stream()
@@ -196,6 +196,7 @@ if st.session_state.page == "login" and st.session_state.user is None:
                         log_activity(u.id, "login")
                         st.success(f"Selamat datang, {u_data.get('nama')}!")
                         user_found = True
+                        st.experimental_rerun() # <<< TAMBAH BARIS INI
                         break
                 if not user_found:
                     st.error("Email atau password salah!")
@@ -205,7 +206,8 @@ if st.session_state.page == "login" and st.session_state.user is None:
     # Tombol Daftar Akun Baru (Diletakkan di luar form, tapi tepat di bawahnya)
     if st.button("Daftar Akun Baru", key="goto_register"):
         st.session_state.page = "register"
-    
+        st.experimental_rerun() # <<< TAMBAH BARIS INI UNTUK PERPINDAHAN PAGE
+
     st.empty()
 
 # ---------------- REGISTER PAGE ----------------
