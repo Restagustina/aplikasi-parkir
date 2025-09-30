@@ -165,16 +165,7 @@ if st.session_state.page == "login" and st.session_state.user is None:
     """, unsafe_allow_html=True)
     
     st.markdown('<div class="login-box">', unsafe_allow_html=True)
-    
-.login-box div[data-testid="stTextInput"],
-.login-box div[data-testid="stTextInput"] > div {
-    max-width: 100%; 
-    width: 100%;
-    /* ... */
-}
 
-    # Catatan: Kita tidak lagi membutuhkan div.center-container!
-    # Konten login langsung dibungkus oleh login-box.
     
     st.markdown('<div class="login-box">', unsafe_allow_html=True)
     
