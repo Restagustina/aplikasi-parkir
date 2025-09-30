@@ -1,5 +1,6 @@
 import streamlit as st
 import firebase_admin
+# Mengembalikan impor ke format yang lebih standar
 from firebase_admin import credentials, firestore, storage 
 import qrcode
 import tempfile
@@ -7,7 +8,6 @@ import os
 import hashlib
 import base64
 import pandas as pd
-from datetime import datetime
 
 # ---------------- FIREBASE SETUP ----------------
 # Pastikan st.secrets['firebase'] sudah diatur
@@ -16,6 +16,7 @@ try:
     if not firebase_admin._apps:
         firebase_admin.initialize_app(cred, {
             # PERBAIKAN ERROR 404: Gunakan ID Proyek Anda saja
+            # Jika ID proyek Anda 'parkir-digital', ini sudah benar.
             "storageBucket": "parkir-digital" 
         })
     db = firestore.client()
@@ -44,92 +45,35 @@ def log_activity(user_id, action):
 def convert_df_to_csv(df):
     return df.to_csv(index=False).encode('utf-8')
 
-# --- FUNGSI QR CODE OTOMATIS ---
-def generate_and_store_qr(user_id, user_role, user_nim):
-    """
-    Membuat QR Code dengan data User ID, mengupload ke Storage,
-    dan menyimpan URL-nya di dokumen pengguna.
-    """
-    if not bucket or not db:
-        st.error("Koneksi Firebase gagal, ID Digital tidak dapat dibuat.")
-        return None
-        
-    # Data QR adalah format: ROLE:UID (contoh: MHS:abcdef123)
-    qr_data = f"{user_role.upper()}:{user_id}" 
-    filename = f"qr_user_{user_nim}.png"
-    tmp_dir = tempfile.gettempdir()
-    qr_path = os.path.join(tmp_dir, filename)
+# --- FUNGSI UTAMA (MENGGUNAKAN SORTING PYTHON) ---
 
-    try:
-        # Generate dan Simpan QR Code di lokal temp
-        img = qrcode.make(qr_data)
-        img.save(qr_path)
-        
-        # Upload ke Firebase Storage
-        qr_url = upload_to_storage(qr_path, f"qr_identitas/{filename}")
-        
-        if qr_url:
-            # Simpan URL QR di dokumen user Firestore
-            user_ref = db.collection("users").document(user_id)
-            user_ref.update({"qr_identitas_url": qr_url})
-            
-            # Update session state
-            # Perlu diperiksa apakah user ada sebelum mencoba mengaksesnya
-            if st.session_state.user and st.session_state.user.get('uid') == user_id:
-                st.session_state.user['qr_identitas_url'] = qr_url
-            
-            st.toast("ID Digital (QR Code) berhasil dibuat!", icon="✅")
-            st.rerun()
-            return qr_url
-        else:
-            return None
-    except Exception as e:
-        st.error(f"Gagal memproses QR Code: {e}")
-        return None
-    finally:
-        if os.path.exists(qr_path):
-            os.remove(qr_path)
-
-# --- FUNGSI GET LOGS ---
 def get_user_logs(user_id):
+    """
+    Mengambil log aktivitas pengguna dari Firestore.
+    """
     if db:
         try:
-            # Gunakan limit untuk menghindari pembacaan yang terlalu besar
             logs_ref = db.collection("log_activity").where("user_id", "==", user_id).limit(100).stream()
+            
             logs = [log.to_dict() for log in logs_ref]
             
-            # Sorting di Python karena kita hanya mengambil 100 data
             logs_sorted = sorted(
                 logs, 
                 key=lambda x: x.get('timestamp', firestore.SERVER_TIMESTAMP), 
                 reverse=True
             )
+            
             return logs_sorted
         except Exception as e:
             st.error(f"Terjadi error saat mengambil log: {e}")
             return []
     return []
 
-def get_all_vehicles():
-    """Mengambil semua data kendaraan (digunakan oleh Admin)."""
-    if db:
-        vehicles_ref = db.collection("vehicles").stream()
-        return [veh.to_dict() for veh in vehicles_ref]
-    return []
-    
-def get_all_users():
-    """Mengambil semua data pengguna (digunakan oleh Admin)."""
-    if db:
-        users_ref = db.collection("users").stream()
-        return [user.to_dict() for user in users_ref]
-    return []
-
 # --- FUNGSI FIREBASE LAIN ---
 
-def register_user(nama, nim, email, password, role):
-    """Mendaftarkan pengguna baru ke Firestore dengan peran."""
+def register_user(nama, nim, email, password):
+    """Mendaftarkan pengguna baru ke Firestore."""
     if db:
-        # Cek duplikasi email
         users_ref = list(db.collection("users").where("email", "==", email).limit(1).get())
         if users_ref:
             return None
@@ -137,17 +81,13 @@ def register_user(nama, nim, email, password, role):
         hashed_password = hash_password(password)
         doc_ref = db.collection("users").add({
             "nama": nama,
-            "nim": nim, 
+            "nim": nim,
             "email": email,
             "password_hash": hashed_password,
-            "role": role,
-            "created_at": firestore.SERVER_TIMESTAMP,
-            "qr_identitas_url": "" # Field untuk QR otomatis
+            "role": "user",
+            "created_at": firestore.SERVER_TIMESTAMP
         })
-        # Ambil data yang baru dibuat
-        doc_id = doc_ref[1].id
-        new_user_doc = db.collection("users").document(doc_id).get().to_dict()
-        return {"uid": doc_id, **new_user_doc}
+        return doc_ref[1].id
     return None
 
 def upload_to_storage(local_path, destination_blob_name):
@@ -163,7 +103,7 @@ def upload_to_storage(local_path, destination_blob_name):
             return None
     return None
 
-def save_data_firestore(user_id, nama, nim, plat, jenis, foto_url, qr_url, role):
+def save_data_firestore(user_id, nama, nim, plat, jenis, foto_url, qr_url):
     """Menyimpan data kendaraan ke Firestore."""
     if db:
         db.collection("vehicles").add({
@@ -174,7 +114,6 @@ def save_data_firestore(user_id, nama, nim, plat, jenis, foto_url, qr_url, role)
             "jenis": jenis,
             "foto_url": foto_url,
             "qr_url": qr_url,
-            "role": role,
             "status": "pending",
             "created_at": firestore.SERVER_TIMESTAMP
         })
@@ -189,26 +128,23 @@ def get_user_vehicles(user_id):
     return []
 
 # ---------------- STREAMLIT APP ----------------
-st.set_page_config(page_title="Digital ID Parkir Fasilkom", page_icon="🅿️", layout="wide")
+st.set_page_config(page_title="Digital ID Parkir Mahasiswa", page_icon="🅿️", layout="wide")
 
-# Session state initialization
+# Session state
 if "user" not in st.session_state:
     st.session_state.user = None
 if "page" not in st.session_state:
-    st.session_state.page = "login_selector" 
-if "admin_logged_in" not in st.session_state:
-    st.session_state.admin_logged_in = False
-if "admin_login_open" not in st.session_state:
-    st.session_state.admin_login_open = False
-if "selected_role" not in st.session_state:
-    st.session_state.selected_role = "Mahasiswa"
+    st.session_state.page = "login"
 
-
+# --------------------------------------------------------------------------
 # --- FUNGSI & PANGGILAN BACKGROUND IMAGE ---
+# --------------------------------------------------------------------------
 
 def get_base64(bin_file):
     if not os.path.exists(bin_file):
-        # Return a simple 1x1 transparent PNG base64 string 
+        # Handle the case where the image file is not found
+        st.error(f"File gambar '{bin_file}' tidak ditemukan.")
+        # Return a simple 1x1 transparent PNG base64 string to prevent other errors
         return "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
 
     with open(bin_file, 'rb') as f:
@@ -227,6 +163,8 @@ def set_background(image_file):
             background-attachment: fixed;
             position: relative;
         }}
+
+        /* Overlay buram */
         [data-testid="stAppViewContainer"]::before {{
             content: "";
             position: absolute;
@@ -234,14 +172,17 @@ def set_background(image_file):
             right: 0;
             bottom: 0;
             left: 0;
-            background: rgba(0, 0, 0, 0.5); 
-            backdrop-filter: blur(8px);    
+            background: rgba(0, 0, 0, 0.5); /* Layer transparan */
+            backdrop-filter: blur(8px);    /* Efek buram */
             z-index: 0;
         }}
+
+        /* Pastikan konten di atas overlay */
         [data-testid="stAppViewContainer"] > * {{
             position: relative;
             z-index: 1;
         }}
+
         [data-testid="stHeader"] {{
             background-color: rgba(0,0,0,0);
         }}
@@ -249,95 +190,96 @@ def set_background(image_file):
         '''
         st.markdown(page_bg_img, unsafe_allow_html=True)
     except Exception as e:
+        # Menangkap error dari get_base64 jika file tidak ditemukan
         st.warning(f"PERINGATAN: Latar belakang tidak diterapkan. Error detail: {e}")
 
-# PANGGIL FUNGSI LATAR BELAKANG
-set_background('BG FASILKOM.jpg') # Pastikan file ini ada atau ganti nama filenya
+# PANGGIL FUNGSI LATAR BELAKANG DI SINI
+set_background('BG FASILKOM.jpg')
 
-# ---------------- CUSTOM CSS UNTUK ADMIN LOGIN (BUTTON KUNCI) ----------------
-st.markdown("""
-<style>
-/* Style untuk menengahkan form login/selector */
-[data-testid="stAppViewContainer"] > .main {
-    display: flex;
-    justify-content: center; /* Horizontally center */
-    align-items: center; /* Vertically center */
-    padding: 0 !important; 
-    min-height: 100vh;
-}
-</style>
-""", unsafe_allow_html=True)
+# ---------------- LOGIN PAGE ----------------
+if st.session_state.page == "login" and st.session_state.user is None:
+    st.markdown("""
+    <style>
+    /* 1. CSS untuk menengahkan kontainer utama Streamlit */
+    [data-testid="stAppViewContainer"] > .main {
+        display: flex;
+        justify-content: center; /* Horizontally center */
+        align-items: center; /* Vertically center */
+        padding: 0 !important; 
+        min-height: 100vh;
+    }
 
-
-# --- STARTING PAGE: ROLE SELECTOR ---
-if st.session_state.page == "login_selector":
+    /* 2. Style untuk Kotak Login */
+    [data-testid="stForm"] {
+        background-color: rgba(255, 255, 255, 0.95); /* Kotak putih di tengah */
+        padding: 30px;
+        border-radius: 15px;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.3); 
+        max-width: 450px; /* Lebar Kotak Login */
+        width: 100%; 
+        margin: auto;
+    }
     
-    # --- ADMIN LOGIN BUTTON ---
-    # Logika untuk menampilkan/menyembunyikan form admin login
-    if st.button("🔑 Admin Login", key="toggle_admin_login_button"):
-        st.session_state.admin_login_open = not st.session_state.admin_login_open
-        if st.session_state.admin_login_open:
-            st.toast("Form Login Admin Dibuka.")
-        else:
-            st.toast("Form Login Admin Ditutup.")
-        st.rerun() 
-        
-    if st.session_state.admin_login_open:
-        # Tampilkan Form Login Admin
-        st.subheader("🔒 Login Admin")
-        with st.form("admin_login_form_2", clear_on_submit=False):
-            admin_user = st.text_input("Username", key="admin_user_input_2")
-            admin_pass = st.text_input("Password", type="password", key="admin_pass_input_2")
-            submitted = st.form_submit_button("Masuk sebagai Admin")
-            
-            if submitted:
-                # Periksa apakah kredensial admin ada di secrets
-                if "admin_user" not in st.secrets:
-                    st.error("EROR KONFIGURASI: Rahasia Admin (admin_user) belum diatur di Secrets!")
-                else:
-                    if admin_user == st.secrets["admin_user"]["username"] and \
-                       hash_password(admin_pass) == st.secrets["admin_user"]["password_hash"]:
-                        
-                        st.session_state.admin_logged_in = True
-                        st.session_state.user = {"uid": "ADMIN_ID", "nama": "Admin", "role": "admin"} 
-                        st.session_state.page = "app"
-                        st.session_state.admin_login_open = False
-                        log_activity("ADMIN_ID", "login admin")
-                        st.rerun() 
-                    else:
-                        st.error("Username atau Password Admin salah!")
-        
-        st.markdown("---") # Garis pemisah antara form admin dan selector user
-        
-    # --- ROLE SELECTOR ---
-    st.markdown("### Masuk Sebagai:")
+    /* 3. Perbaikan Input: Input dan tombol di dalam form harus mengisi 100% dari box */
+    [data-testid="stForm"] div[data-testid="stTextInput"],
+    [data-testid="stForm"] div[data-testid="stTextInput"] > div {
+        max-width: 100%; 
+        width: 100%;
+    }
     
-    col1, col2, col3, col4 = st.columns(4)
+    /* Styling Tombol di dalam Form (Form hanya memiliki satu tombol, tombol Submit) */
+    [data-testid="stForm"] div.stButton > button { 
+        width: 100%;
+        margin-top: 15px;
+    }
+
+    /* Judul di dalam box */
+    [data-testid="stForm"] h3 {
+        text-align: left;
+        margin-bottom: 20px;
+        color: #333;
+    }
+
+    /* Streamlit input custom style */
+    div[data-testid="stTextInput"] > div > div > input {
+        border-radius: 8px;
+        border: 1px solid #ccc;
+    }
     
-    roles = ["Mahasiswa", "Dosen", "Staff", "Tamu"]
+    /* Tombol Daftar Akun Baru (SEKARANG DI LUAR FORM) */
+    div.stButton:last-of-type > button { 
+        background-color:#ff4b4b; 
+        color:white; 
+        border-radius:10px; 
+        border:none; 
+        width: 100%; 
+        max-width: 450px; /* Batasi lebarnya sama dengan form */
+        margin-top: 10px;
+    }
+
+    .main .block-container {
+        padding-top: 0;
+    }
     
-    for i, role in enumerate(roles):
-        with [col1, col2, col3, col4][i]:
-            if st.button(role, key=f"select_role_{role}", use_container_width=True):
-                st.session_state.selected_role = role.lower()
-                st.session_state.page = "login"
-                st.rerun()
-
-
-# ---------------- USER LOGIN PAGE ----------------
-elif st.session_state.page == "login" and st.session_state.user is None:
-    st.markdown(f"### 🔑 Login {st.session_state.selected_role.capitalize()}") 
-
+    </style>
+    """, unsafe_allow_html=True)
+    
+    st.empty() 
+    
+    # --- FORM (KOTAK LOGIN TUNGGAL) ---
     with st.form("login_form", clear_on_submit=False):
+        st.markdown("### 🔑 Login Pengguna") 
+
         email = st.text_input("Email", key="login_email")
         password = st.text_input("Password", type="password", key="login_password")
 
-        submitted = st.form_submit_button(f"Masuk sebagai {st.session_state.selected_role.capitalize()}")
+        # Tombol Login (ini adalah tombol submit form)
+        submitted = st.form_submit_button("Login")
 
+        # Logika Login HANYA berjalan ketika tombol submit form diklik (termasuk menekan ENTER)
         if submitted:
             if db:
-                # Cari user berdasarkan email dan role yang dipilih
-                users = db.collection("users").where("email", "==", email).where("role", "==", st.session_state.selected_role).stream()
+                users = db.collection("users").where("email", "==", email).stream()
                 user_found = False
                 for u in users:
                     u_data = u.to_dict()
@@ -346,34 +288,25 @@ elif st.session_state.page == "login" and st.session_state.user is None:
                         log_activity(u.id, "login")
                         st.success(f"Selamat datang, {u_data.get('nama')}!")
                         user_found = True
-                        st.session_state.page = "app"
                         st.rerun() 
                         break
                 if not user_found:
-                    st.error(f"Akun tidak ditemukan atau peran tidak sesuai ({st.session_state.selected_role.capitalize()})!")
+                    st.error("Email atau password salah!")
             else:
                 st.error("Koneksi ke database gagal.")
 
+    # Tombol Daftar Akun Baru (Diletakkan di luar form, tapi tepat di bawahnya)
     if st.button("Daftar Akun Baru", key="goto_register"):
         st.session_state.page = "register"
         st.rerun() 
     
-    if st.button("Kembali ke Pilihan Peran", key="back_to_selector"):
-        st.session_state.page = "login_selector"
-        st.rerun()
+    st.empty()
 
 # ---------------- REGISTER PAGE ----------------
 elif st.session_state.page == "register" and st.session_state.user is None:
-    role_options = ["Mahasiswa", "Dosen", "Staff", "Tamu"]
     st.subheader("📝 Form Registrasi User Baru")
-    
-    # Input Peran Saat Registrasi
-    reg_role_str = st.selectbox("Daftar sebagai:", role_options, key="reg_role_select")
-    reg_role = reg_role_str.lower() # Simpan dalam lowercase
-
     reg_nama = st.text_input("Nama Lengkap", key="reg_nama")
-    reg_nim_label = "NIM/NIP/ID Lain" if reg_role not in ["mahasiswa", "dosen"] else reg_role.upper()
-    reg_nim = st.text_input(reg_nim_label, key="reg_nim")
+    reg_nim = st.text_input("NIM", key="reg_nim")
     reg_email = st.text_input("Email", key="reg_email")
     reg_password = st.text_input("Password", type="password", key="reg_password")
     reg_password2 = st.text_input("Konfirmasi Password", type="password", key="reg_password2")
@@ -382,14 +315,10 @@ elif st.session_state.page == "register" and st.session_state.user is None:
         if reg_password != reg_password2:
             st.error("Password dan konfirmasi tidak sama!")
         elif reg_nama and reg_nim and reg_email and reg_password:
-            # Panggil fungsi register
-            new_user_data = register_user(reg_nama, reg_nim, reg_email, reg_password, reg_role) 
-            
-            if new_user_data:
-                # Login otomatis setelah daftar
-                st.session_state.user = new_user_data
-                st.session_state.page = "app"
-                st.success("Akun berhasil dibuat! Anda otomatis masuk.")
+            uid = register_user(reg_nama, reg_nim, reg_email, reg_password) 
+            if uid:
+                st.success("Akun berhasil dibuat! Silahkan login.")
+                st.session_state.page = "login"
                 st.rerun() 
             else:
                 st.error("Email sudah terdaftar!")
@@ -397,265 +326,125 @@ elif st.session_state.page == "register" and st.session_state.user is None:
             st.error("Lengkapi semua data!")
 
     if st.button("Kembali ke Login", key="back_login"):
-        st.session_state.page = "login_selector"
+        st.session_state.page = "login"
         st.rerun() 
 
-# ---------------- APP UTAMA (USER & ADMIN) ----------------
-elif st.session_state.user and st.session_state.page == "app":
-    
-    user_id = st.session_state.user['uid']
-    user_role = st.session_state.user['role']
-    
-    # ------------------ LOGIKA GENERATE QR OTOMATIS (USER SAJA) ------------------
-    # Cek hanya jika bukan Admin dan QR belum ada
-    if user_role != "admin" and ('qr_identitas_url' not in st.session_state.user or st.session_state.user.get('qr_identitas_url') == ""):
-        with st.spinner(f'Sistem sedang membuat ID Digital ({user_role.capitalize()}) Anda secara otomatis...'):
-             generate_and_store_qr(
-                user_id=user_id,
-                user_role=user_role,
-                user_nim=st.session_state.user['nim'] # Gunakan NIM/ID
-             )
-    # -----------------------------------------------------------------------------
-
+# ---------------- APP UTAMA ----------------
+elif st.session_state.user:
     st.sidebar.title("Menu")
-    
-    if user_role == "admin":
-        st.success(f"Selamat datang, {st.session_state.user['nama']} (Administrator)!")
-        menu_options = ["Dashboard Admin", "Data Pengguna", "Data Kendaraan Terdaftar", "Log Aktivitas Global"]
-    else:
-        st.success(f"Selamat datang, {st.session_state.user['nama']} ({user_role.capitalize()})!")
-        menu_options = ["ID Digital (QR Code)", "Daftar Kendaraan", "Lihat Data Kendaraan", "Profil & Log"]
-        
-    menu = st.sidebar.selectbox("", menu_options)
-    
+    menu = st.sidebar.selectbox("", ["Profil", "Daftar Kendaraan", "Lihat Data Kendaraan"])
     if st.sidebar.button("Logout"):
-        log_activity(user_id, "logout")
+        log_activity(st.session_state.user['uid'], "logout")
         st.session_state.user = None
-        st.session_state.admin_logged_in = False
-        st.session_state.page = "login_selector"
+        st.session_state.page = "login"
         st.rerun() 
 
-    # =========================================================================
-    # --- ADMIN PAGES ---
-    # =========================================================================
-    if user_role == "admin":
+    user_id = st.session_state.user['uid']
+    st.success(f"Selamat datang, {st.session_state.user['nama']}!")
+
+    # ---------- PROFIL ----------
+    if menu == "Profil":
+        st.header("Profil Pengguna")
+        st.write(f"Nama: {st.session_state.user['nama']}")
+        st.write(f"NIM: {st.session_state.user['nim']}")
+        st.write(f"Email: {st.session_state.user['email']}")
+
+        st.subheader("Log Aktivitas (100 Terbaru)")
+        logs = get_user_logs(user_id) 
         
-        if menu == "Dashboard Admin":
-            st.header("Dashboard Administrator")
-            
-            all_users = get_all_users()
-            all_vehicles = get_all_vehicles()
-            pending_vehicles = [v for v in all_vehicles if v.get('status') == 'pending']
-            
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Total Pengguna", len(all_users))
-            col2.metric("Total Kendaraan", len(all_vehicles))
-            col3.metric("Menunggu Persetujuan", len(pending_vehicles))
-
-        elif menu == "Data Pengguna":
-            st.header("Manajemen Pengguna Terdaftar")
-            all_users = get_all_users()
-            
-            if all_users:
-                df_users = pd.DataFrame(all_users)
-                display_cols = ['nama', 'nim', 'role', 'email', 'created_at']
-                df_display = df_users[display_cols].rename(columns={'nim': 'ID Utama', 'role': 'Peran', 'created_at': 'Tanggal Daftar'})
-                
-                # Konversi Timestamp ke string (jika belum)
-                df_display['Tanggal Daftar'] = df_display['Tanggal Daftar'].apply(
-                    lambda x: x.strftime("%d-%m-%Y %H:%M:%S") if isinstance(x, datetime) else str(x)
-                )
-
-                st.dataframe(df_display, use_container_width=True)
-            else:
-                st.info("Belum ada data pengguna yang terdaftar.")
-                
-        elif menu == "Data Kendaraan Terdaftar":
-            st.header("Manajemen Kendaraan")
-            all_vehicles = get_all_vehicles()
-            
-            if all_vehicles:
-                df_vehicles = pd.DataFrame(all_vehicles)
-                
-                # Cek apakah dokumen memiliki ID, jika tidak, tampilkan pesan
+        if logs:
+            processed_logs = []
+            for l in logs:
                 try:
-                    df_vehicles['doc_id'] = [db.collection("vehicles").document().id for _ in range(len(df_vehicles))]
-                except Exception:
-                    # Ini hanya untuk menghindari crash jika data vehicles diambil tanpa ID,
-                    # Namun ini menunjukkan potensi masalah pada pengambilan data Anda
-                    pass 
-                
-                display_cols = ['nama', 'nim', 'role', 'plat', 'jenis', 'status', 'created_at']
-                df_display = df_vehicles[display_cols].rename(columns={'nim': 'ID/NIM', 'plat': 'Plat Nomor', 'role': 'Peran', 'created_at': 'Tanggal Daftar'})
-                
-                # Konversi Timestamp ke string (jika belum)
-                df_display['Tanggal Daftar'] = df_display['Tanggal Daftar'].apply(
-                    lambda x: x.strftime("%d-%m-%Y %H:%M:%S") if isinstance(x, datetime) else str(x)
-                )
-
-                st.dataframe(df_display, use_container_width=True)
-                
-                # Fitur Aksi: Approve/Reject (Memerlukan implementasi update Firestore)
-                st.subheader("Aksi Kendaraan")
-                pending_plats = [v['plat'] for v in all_vehicles if v.get('status') == 'pending']
-                if pending_plats:
-                    plat_to_act = st.selectbox("Pilih Plat untuk Aksi", pending_plats)
-                    
-                    if st.button("✅ Setujui (Approve)"):
-                        # Implementasi: db.collection("vehicles").where("plat", "==", plat_to_act).stream()
-                        st.success(f"Plat **{plat_to_act}** disetujui (Fitur update DB perlu diimplementasikan).")
-                    
-                    if st.button("❌ Tolak (Reject)"):
-                        st.warning(f"Plat **{plat_to_act}** ditolak (Fitur update DB perlu diimplementasikan).")
-                else:
-                    st.info("Tidak ada kendaraan menunggu persetujuan.")
-                
-            else:
-                st.info("Belum ada data kendaraan yang didaftarkan.")
-                
-        elif menu == "Log Aktivitas Global":
-            st.header("Log Aktivitas Global")
-            st.info("Untuk performa, data ini dibatasi hanya Log Aktivitas Admin.")
-            
-            logs = get_user_logs(user_id) # Ambil log Admin
-            
-            if logs:
-                processed_logs = []
-                for l in logs:
-                    try:
-                        ts_obj = l.get('timestamp')
-                        ts_str = ts_obj.strftime("%d-%m-%Y %H:%M:%S") if hasattr(ts_obj, 'strftime') else "Tanggal tidak tersedia"
-                    except Exception:
-                        ts_str = "Data Waktu Rusak"
-                    
-                    processed_logs.append({
-                        "Aktivitas": l.get('action', 'N/A').capitalize(),
-                        "Waktu": ts_str
-                    })
-                
-                df_logs = pd.DataFrame(processed_logs)
-                st.dataframe(df_logs, use_container_width=True, hide_index=True)
-            else:
-                st.info("Belum ada aktivitas admin.")
-
-
-    # =========================================================================
-    # --- USER PAGES ---
-    # =========================================================================
-    else: # Role selain admin (Mahasiswa, Dosen, Staff, Tamu)
-
-        # ---------- ID DIGITAL (QR CODE) ----------
-        if menu == "ID Digital (QR Code)":
-            st.header(f"ID Digital ({user_role.capitalize()})")
-            qr_url = st.session_state.user.get('qr_identitas_url')
-
-            if qr_url and qr_url != "":
-                st.success("QR Code ID Digital Anda siap digunakan untuk akses gerbang.")
-                st.image(qr_url, caption=f"ID Digital: {user_role.capitalize()}", width=300)
-                
-                # Tombol download menggunakan HTML untuk memaksa download
-                st.markdown(f'<a href="{qr_url}" download="qr_identitas_{st.session_state.user["nim"]}.png" target="_blank"><button style="background-color: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer;">Download QR Code</button></a>', unsafe_allow_html=True)
-                
-            else:
-                st.warning("QR Code Anda sedang dalam proses pembuatan. Mohon tunggu sejenak atau refresh halaman.")
-
-        # ---------- DAFTAR KENDARAAN ----------
-        elif menu == "Daftar Kendaraan":
-            st.header("Form Pendaftaran Kendaraan")
-            st.info(f"Anda mendaftar sebagai **{user_role.capitalize()}**.")
-            
-            nama = st.text_input("Nama Lengkap", value=st.session_state.user['nama'], disabled=True)
-            nim = st.text_input("NIM/ID", value=st.session_state.user['nim'], disabled=True)
-            
-            plat = st.text_input("Plat Nomor")
-            jenis = st.selectbox("Jenis Kendaraan", ["Motor", "Mobil", "Lainnya"])
-            foto = st.file_uploader("Upload Foto Kendaraan", type=["jpg","jpeg","png"])
-
-            if st.button("Daftar Kendaraan"):
-                if plat and jenis and foto:
-                    tmp_dir = tempfile.gettempdir()
-                    
-                    # 1. Simpan dan Upload Foto
-                    tmp_foto_path = os.path.join(tmp_dir, f"{plat}_foto.png")
-                    with open(tmp_foto_path, "wb") as f:
-                        f.write(foto.getbuffer())
-                    foto_url = upload_to_storage(tmp_foto_path, f"foto/{plat}.png")
-
-                    # 2. Buat dan Upload QR Kendaraan
-                    qr_data = f"VEHICLE:{plat}"
-                    qr_filename = os.path.join(tmp_dir, f"qr_kendaraan_{plat}.png")
-                    img = qrcode.make(qr_data)
-                    img.save(qr_filename)
-                    qr_url = upload_to_storage(qr_filename, f"qr_kendaraan/{qr_filename}")
-
-                    if foto_url and qr_url:
-                        # 3. Simpan data ke Firestore
-                        save_data_firestore(user_id, nama, nim, plat, jenis, foto_url, qr_url, user_role)
-
-                        st.success("✅ Data kendaraan berhasil disimpan! Menunggu persetujuan Admin.")
-                        st.image(qr_filename, caption="QR Code Kendaraan (Sementara)", width=150)
+                    # OPSI FINAL: Coba format langsung. Gunakan try-except untuk menangani kegagalan.
+                    # Asumsi bahwa l['timestamp'] adalah objek Timestamp atau None/string lain.
+                    ts_obj = l.get('timestamp')
+                    if ts_obj:
+                        ts_str = ts_obj.strftime("%d-%m-%Y %H:%M:%S")
                     else:
-                        st.error("Gagal mengupload file ke Storage! Periksa koneksi Firebase Anda.")
-
-                    # 4. Bersihkan file lokal
-                    if os.path.exists(tmp_foto_path):
-                        os.remove(tmp_foto_path)
-                    if os.path.exists(qr_filename):
-                        os.remove(qr_filename)
-                else:
-                    st.error("⚠️ Lengkapi semua data dan upload foto kendaraan.")
-
-        # ---------- LIHAT DATA KENDARAAN ----------
-        elif menu == "Lihat Data Kendaraan":
-            st.header("Data Kendaraan Saya")
-            data = get_user_vehicles(user_id) 
-            if data:
-                for d in data:
-                    st.subheader(f"{d['plat']} ({d['jenis']})")
-                    st.write(f"Status Pendaftaran: **{d['status'].capitalize()}**")
-                    st.image(d["foto_url"], caption="Foto Kendaraan", width=200)
-                    st.image(d["qr_url"], caption="QR Code Kendaraan", width=150)
-                    st.markdown("---")
-            else:
-                st.info("Belum ada data kendaraan yang terdaftar.")
+                        ts_str = "Tanggal tidak tersedia"
+                except AttributeError:
+                    # Jika gagal (misalnya, jika ts_obj adalah string atau tipe data lain yang tidak memiliki .strftime)
+                    ts_str = "Error Konversi Waktu"
+                except Exception:
+                    ts_str = "Data Waktu Rusak"
                 
-        # ---------- PROFIL & LOG ----------
-        elif menu == "Profil & Log":
-            st.header(f"Profil Pengguna ({user_role.capitalize()})")
-            st.write(f"Nama: {st.session_state.user['nama']}")
-            st.write(f"ID Utama: {st.session_state.user['nim']}")
-            st.write(f"Email: {st.session_state.user['email']}")
-
-            st.subheader("Log Aktivitas Saya (100 Terbaru)")
-            logs = get_user_logs(user_id) 
+                processed_logs.append({
+                    "Aktivitas": l.get('action', 'N/A').capitalize(),
+                    "Waktu": ts_str
+                })
             
-            if logs:
-                processed_logs = []
-                for l in logs:
-                    try:
-                        ts_obj = l.get('timestamp')
-                        ts_str = ts_obj.strftime("%d-%m-%Y %H:%M:%S") if hasattr(ts_obj, 'strftime') else "Tanggal tidak tersedia"
-                    except Exception:
-                        ts_str = "Data Waktu Rusak"
-                    
-                    processed_logs.append({
-                        "Aktivitas": l.get('action', 'N/A').capitalize(),
-                        "Waktu": ts_str
-                    })
+            df_logs = pd.DataFrame(processed_logs)
+            
+            st.dataframe(df_logs, use_container_width=True, hide_index=True)
+            
+            csv_data = convert_df_to_csv(df_logs)
+            
+            st.download_button(
+                label="📥 Download Data Log (CSV)",
+                data=csv_data,
+                file_name=f'log_aktivitas_{st.session_state.user["nim"]}.csv',
+                mime='text/csv',
+                use_container_width=True
+            )
+            
+        else:
+            st.info("Belum ada aktivitas login/logout.")
+
+    # ---------- DAFTAR KENDARAAN ----------
+    elif menu == "Daftar Kendaraan":
+        st.header("Form Pendaftaran Kendaraan")
+        nama = st.text_input("Nama Lengkap", value=st.session_state.user['nama'])
+        nim = st.text_input("NIM", value=st.session_state.user['nim'])
+        plat = st.text_input("Plat Nomor")
+        jenis = st.selectbox("Jenis Kendaraan", ["Motor", "Mobil", "Lainnya"])
+        foto = st.file_uploader("Upload Foto Kendaraan", type=["jpg","jpeg","png"])
+
+        if st.button("Daftar Kendaraan"):
+            if nama and nim and plat and jenis and foto:
+                tmp_dir = tempfile.gettempdir()
+                # Simpan foto ke temp file
+                tmp_foto_path = os.path.join(tmp_dir, f"{plat}_foto.png")
+                with open(tmp_foto_path, "wb") as f:
+                    f.write(foto.getbuffer())
                 
-                df_logs = pd.DataFrame(processed_logs)
-                
-                st.dataframe(df_logs, use_container_width=True, hide_index=True)
-                
-                csv_data = convert_df_to_csv(df_logs)
-                
-                st.download_button(
-                    label="📥 Download Data Log (CSV)",
-                    data=csv_data,
-                    file_name=f'log_aktivitas_{st.session_state.user["nim"]}.csv',
-                    mime='text/csv',
-                    use_container_width=True
-                )
-                
+                # Upload foto
+                foto_url = upload_to_storage(tmp_foto_path, f"foto/{plat}.png")
+
+                # Buat dan simpan QR Code
+                qr_data = f"{nama}-{nim}-{plat}"
+                qr_filename = os.path.join(tmp_dir, f"qr_{plat}.png")
+                img = qrcode.make(qr_data)
+                img.save(qr_filename)
+                qr_url = upload_to_storage(qr_filename, f"qr/{qr_filename}")
+
+                if foto_url and qr_url:
+                    # Simpan data ke Firestore
+                    save_data_firestore(user_id, nama, nim, plat, jenis, foto_url, qr_url)
+
+                    st.success("✅ Data kendaraan berhasil disimpan!")
+                    st.image(qr_filename, caption="QR Code Parkir Anda")
+                else:
+                    st.error("Gagal mengupload file ke Storage!")
+
+                # Bersihkan file lokal
+                if os.path.exists(tmp_foto_path):
+                    os.remove(tmp_foto_path)
+                if os.path.exists(qr_filename):
+                    os.remove(qr_filename)
             else:
-                st.info("Belum ada aktivitas login/logout.")
+                st.error("⚠️ Lengkapi semua data dan upload foto kendaraan.")
+
+    # ---------- LIHAT DATA KENDARAAN ----------
+    elif menu == "Lihat Data Kendaraan":
+        st.header("Data Kendaraan Saya")
+        data = get_user_vehicles(user_id) 
+        if data:
+            for d in data:
+                st.subheader(f"{d['plat']} ({d['jenis']})")
+                st.write(f"Pemilik: {d['nama']} ({d['nim']})")
+                st.image(d["foto_url"], caption="Foto Kendaraan", width=200)
+                st.image(d["qr_url"], caption="QR Code", width=150)
+                st.markdown("---")
+        else:
+            st.info("Belum ada data kendaraan yang terdaftar.")
