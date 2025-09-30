@@ -115,46 +115,47 @@ if st.session_state.page == "login" and st.session_state.user is None:
     }
 
     /* 2. Style untuk Kotak Login */
-    .login-box {
+    /* Kita menargetkan container Streamlit (diwakili oleh stBlock/stVerticalBlock) 
+       yang kita buat di bawah, dan memberikannya style login-box */
+    .login-container-style {
         background-color: rgba(255, 255, 255, 0.9);
         padding: 30px;
         border-radius: 15px;
         box-shadow: 0 8px 30px rgba(0,0,0,0.5); 
-        max-width: 450px; /* Lebar Maksimum Kotak Login (Bisa disesuaikan) */
+        max-width: 450px; /* Lebar Kotak Login (Bisa disesuaikan) */
         width: 100%; 
         margin: auto;
     }
     
-    /* 3. PERBAIKAN UTAMA: Membatasi Lebar Input Teks */
-    .login-box div[data-testid="stTextInput"],
-    .login-box div[data-testid="stTextInput"] > div {
-        /* Memastikan input tidak meregang di luar login-box */
+    /* 3. Perbaikan Input: Memastikan input di dalam container mengikuti lebarnya */
+    .login-container-style div[data-testid="stTextInput"],
+    .login-container-style div[data-testid="stTextInput"] > div {
         max-width: 100%; 
         width: 100%;
         margin-left: 0;
         margin-right: 0;
     }
 
-    /* Input field itu sendiri */
-    div[data-testid="stTextInput"] > div > div > input {
-        border-radius: 8px;
-        border: 1px solid #ccc;
-    }
-    
-    /* Tombol Login (pertama) */
-    div.stButton:nth-of-type(1) > button { 
+    /* Tombol Login (pertama di container) */
+    .login-container-style div.stButton:nth-of-type(1) > button { 
         width: 100%;
         margin-top: 15px;
     }
 
-    /* Tombol Daftar Akun Baru (kedua) */
-    div.stButton:nth-of-type(2) > button { 
+    /* Tombol Daftar Akun Baru (kedua di container) */
+    .login-container-style div.stButton:nth-of-type(2) > button { 
         background-color:#ff4b4b; 
         color:white; 
         border-radius:10px; 
         border:none; 
         width: 100%; 
         margin-top: 10px;
+    }
+    
+    /* Input field itu sendiri */
+    div[data-testid="stTextInput"] > div > div > input {
+        border-radius: 8px;
+        border: 1px solid #ccc;
     }
 
     .main .block-container {
@@ -164,38 +165,46 @@ if st.session_state.page == "login" and st.session_state.user is None:
     </style>
     """, unsafe_allow_html=True)
     
-    st.markdown('<div class="login-box">', unsafe_allow_html=True)
-
+    # --- MEMBUAT SATU CONTAINER DI TENGAH ---
+    # st.empty() ditempatkan di luar container untuk memastikan centering bekerja sempurna.
     
-    st.markdown('<div class="login-box">', unsafe_allow_html=True)
+    st.empty() 
     
-    st.subheader("🔑 Login Pengguna")
-    email = st.text_input("Email", key="login_email")
-    password = st.text_input("Password", type="password", key="login_password")
+    # 1. Gunakan st.container untuk membungkus SEMUA elemen form.
+    with st.container():
+        # 2. Berikan class CSS kustom ke container ini menggunakan st.markdown di awal container
+        st.markdown('<div class="login-container-style">', unsafe_allow_html=True)
 
-    # Pastikan db sudah terinisialisasi sebelum digunakan
-    if st.button("Login", key="btn_login"):
-        if db:
-            users = db.collection("users").where("email", "==", email).stream()
-            user_found = False
-            for u in users:
-                u_data = u.to_dict()
-                if u_data.get("password_hash") == hash_password(password):
-                    st.session_state.user = {"uid": u.id, **u_data}
-                    log_activity(u.id, "login")
-                    st.success(f"Selamat datang, {u_data.get('nama')}!")
-                    user_found = True
-                    break
-            if not user_found:
-                st.error("Email atau password salah!")
-        else:
-            st.error("Koneksi ke database gagal. Silahkan periksa konfigurasi Firebase Anda.")
+        st.subheader("🔑 Login Pengguna")
+        email = st.text_input("Email", key="login_email")
+        password = st.text_input("Password", type="password", key="login_password")
 
-    # Tombol daftar
-    if st.button("Daftar Akun Baru", key="goto_register"):
-        st.session_state.page = "register"
-    
-    st.markdown('</div>', unsafe_allow_html=True) # Tutup login-box
+        # Pastikan db sudah terinisialisasi sebelum digunakan
+        if st.button("Login", key="btn_login"):
+            if db:
+                users = db.collection("users").where("email", "==", email).stream()
+                user_found = False
+                for u in users:
+                    u_data = u.to_dict()
+                    if u_data.get("password_hash") == hash_password(password):
+                        st.session_state.user = {"uid": u.id, **u_data}
+                        log_activity(u.id, "login")
+                        st.success(f"Selamat datang, {u_data.get('nama')}!")
+                        user_found = True
+                        break
+                if not user_found:
+                    st.error("Email atau password salah!")
+            else:
+                st.error("Koneksi ke database gagal. Silahkan periksa konfigurasi Firebase Anda.")
+
+        # Tombol daftar
+        if st.button("Daftar Akun Baru", key="goto_register"):
+            st.session_state.page = "register"
+        
+        # 3. Tutup div kustom
+        st.markdown('</div>', unsafe_allow_html=True) 
+
+    st.empty() # st.empty()
 
 # ---------------- REGISTER PAGE ----------------
 elif st.session_state.page == "register" and st.session_state.user is None:
