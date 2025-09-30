@@ -37,16 +37,37 @@ def log_activity(user_id, action):
     else:
         print(f"Log activity: {action} for user {user_id}")
 
-# --- FUNGSI FIREBASE YANG SEBELUMNYA HILANG ---
+# --- FUNGSI UTAMA YANG DIMODIFIKASI (OPSI 1) ---
 
 def get_user_logs(user_id):
-    """Mengambil log aktivitas pengguna dari Firestore."""
+    """
+    Mengambil log aktivitas pengguna dari Firestore.
+    Menggunakan Opsi 1: Filter di Firestore, pengurutan di Python.
+    """
     if db:
-        # PENTING: Kueri ini memerlukan indeks komposit di Firebase Console:
-        # Koleksi: log_activity, Bidang: user_id (Asc), timestamp (Desc)
-        logs_ref = db.collection("log_activity").where("user_id", "==", user_id).order_by("timestamp", direction=firestore.Query.DESCENDING).limit(10).stream()
-        return [log.to_dict() for log in logs_ref]
+        try:
+            # 1. Ambil data DENGAN filter user_id (menghindari Indeks Komposit)
+            # Kueri HANYA menggunakan where() dan limit().
+            logs_ref = db.collection("log_activity").where("user_id", "==", user_id).limit(10).stream()
+            
+            # 2. Konversi hasil kueri ke list dictionaries
+            logs = [log.to_dict() for log in logs_ref]
+            
+            # 3. Urutkan data di sisi Python (client-side sorting)
+            # Mengurutkan berdasarkan 'timestamp' secara Descending (terbaru di atas)
+            logs_sorted = sorted(
+                logs, 
+                key=lambda x: x.get('timestamp', firestore.SERVER_TIMESTAMP), 
+                reverse=True
+            )
+            
+            return logs_sorted
+        except Exception as e:
+            st.error(f"Terjadi error saat mengambil log: {e}")
+            return []
     return []
+
+# --- FUNGSI FIREBASE LAIN ---
 
 def register_user(nama, nim, email, password):
     """Mendaftarkan pengguna baru ke Firestore."""
@@ -101,8 +122,6 @@ def save_data_firestore(user_id, nama, nim, plat, jenis, foto_url, qr_url):
 def get_user_vehicles(user_id):
     """Mengambil semua data kendaraan milik pengguna tertentu."""
     if db:
-        # Kueri ini mungkin juga butuh indeks komposit di Firebase Console:
-        # Koleksi: vehicles, Bidang: user_id (Asc)
         vehicles_ref = db.collection("vehicles").where("user_id", "==", user_id).stream()
         return [veh.to_dict() for veh in vehicles_ref]
     return []
@@ -322,7 +341,8 @@ elif st.session_state.user:
         st.write(f"NIM: {st.session_state.user['nim']}")
         st.write(f"Email: {st.session_state.user['email']}")
 
-        st.subheader("Log Aktivitas")
+        st.subheader("Log Aktivitas (10 Terbaru)")
+        # Kueri ini menggunakan pengurutan di Python (Opsi 1)
         logs = get_user_logs(user_id) 
         if logs:
             for l in logs:
