@@ -82,45 +82,44 @@ def set_background(image_file):
 set_background('BG FASILKOM.png')
 
 # ---------------- LOGIN PAGE ----------------
+# ---------------- LOGIN PAGE ----------------
 if st.session_state.page == "login" and st.session_state.user is None:
     st.markdown("""
     <style>
-    /* Container untuk menengahkan login box di tengah halaman */
-    .center-container {
+    /* 1. CSS untuk menengahkan kontainer utama Streamlit */
+    /* Target div yang membungkus seluruh konten utama Streamlit */
+    [data-testid="stAppViewContainer"] > .main {
         display: flex;
         justify-content: center; /* Horizontally center */
         align-items: center; /* Vertically center */
-        height: 100vh; /* Tinggi penuh viewport */
-        width: 100vw;
-        position: fixed; 
-        top: 0;
-        left: 0;
-        z-index: 9999; 
+        padding: 0 !important; /* Hapus padding default Streamlit */
+        min-height: 100vh; /* Pastikan tinggi penuh */
     }
-    
+
+    /* 2. Style untuk Kotak Login */
     .login-box {
         background-color: rgba(255, 255, 255, 0.9); /* Putih transparan */
         padding: 30px;
         border-radius: 15px;
         box-shadow: 0 8px 30px rgba(0,0,0,0.5); 
         max-width: 400px; 
-        width: 90%; 
+        width: 100%; /* Gunakan lebar penuh dari max-width */
+        margin: auto; /* Membantu penempatan */
+        z-index: 10000; /* Pastikan di atas layer lain */
     }
     
-    /* Target Tombol Login (pertama) */
+    /* Tombol Login (pertama) */
     div.stButton:nth-of-type(1) > button { 
         width: 100%;
         margin-top: 15px;
     }
 
-    /* Target Tombol Daftar Akun Baru (kedua) */
+    /* Tombol Daftar Akun Baru (kedua) */
     div.stButton:nth-of-type(2) > button { 
         background-color:#ff4b4b; 
         color:white; 
-        padding:10px 20px; 
         border-radius:10px; 
         border:none; 
-        cursor:pointer;
         width: 100%; 
         margin-top: 10px;
     }
@@ -131,17 +130,24 @@ if st.session_state.page == "login" and st.session_state.user is None:
         border: 1px solid #ccc;
     }
     
+    /* Kosongkan margin di atas, karena kita sudah centring (Opsional) */
+    .main .block-container {
+        padding-top: 0;
+    }
+    
     </style>
     """, unsafe_allow_html=True)
 
-    # Wrap login box dengan center-container
-    st.markdown('<div class="center-container">', unsafe_allow_html=True)
+    # Catatan: Kita tidak lagi membutuhkan div.center-container!
+    # Konten login langsung dibungkus oleh login-box.
+    
     st.markdown('<div class="login-box">', unsafe_allow_html=True)
     
     st.subheader("🔑 Login Pengguna")
     email = st.text_input("Email", key="login_email")
     password = st.text_input("Password", type="password", key="login_password")
 
+    # Pastikan db sudah terinisialisasi sebelum digunakan
     if st.button("Login", key="btn_login"):
         if db:
             users = db.collection("users").where("email", "==", email).stream()
@@ -164,7 +170,6 @@ if st.session_state.page == "login" and st.session_state.user is None:
         st.session_state.page = "register"
     
     st.markdown('</div>', unsafe_allow_html=True) # Tutup login-box
-    st.markdown('</div>', unsafe_allow_html=True) # Tutup center-container
 
 # ---------------- REGISTER PAGE ----------------
 elif st.session_state.page == "register" and st.session_state.user is None:
