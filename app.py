@@ -79,7 +79,7 @@ def set_background(image_file):
 
 # PANGGIL FUNGSI LATAR BELAKANG DI SINI
 # Ganti 'BG FASILKOM.png' jika format atau namanya berbeda
-set_background('BG FASILKOM.png')
+set_background('BG FASILKOM.pnj')
 
 # ---------------- LOGIN PAGE ----------------
 # ---------------- LOGIN PAGE ----------------
