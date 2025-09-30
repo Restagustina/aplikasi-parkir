@@ -115,14 +115,13 @@ if st.session_state.page == "login" and st.session_state.user is None:
     }
 
     /* 2. Style untuk Kotak Login */
-    /* Kita menargetkan container Streamlit (diwakili oleh stBlock/stVerticalBlock) 
-       yang kita buat di bawah, dan memberikannya style login-box */
+    /* Menargetkan container Streamlit dengan class kustom */
     .login-container-style {
-        background-color: rgba(255, 255, 255, 0.9);
+        background-color: rgba(255, 255, 255, 0.95); /* Sedikit lebih solid */
         padding: 30px;
         border-radius: 15px;
-        box-shadow: 0 8px 30px rgba(0,0,0,0.5); 
-        max-width: 450px; /* Lebar Kotak Login (Bisa disesuaikan) */
+        box-shadow: 0 10px 40px rgba(0,0,0,0.3); /* Shadow lebih menonjol */
+        max-width: 450px; /* Lebar Maksimum Kotak Login */
         width: 100%; 
         margin: auto;
     }
@@ -135,7 +134,13 @@ if st.session_state.page == "login" and st.session_state.user is None:
         margin-left: 0;
         margin-right: 0;
     }
-
+    
+    /* Input field itu sendiri */
+    div[data-testid="stTextInput"] > div > div > input {
+        border-radius: 8px;
+        border: 1px solid #ccc;
+    }
+    
     /* Tombol Login (pertama di container) */
     .login-container-style div.stButton:nth-of-type(1) > button { 
         width: 100%;
@@ -151,13 +156,14 @@ if st.session_state.page == "login" and st.session_state.user is None:
         width: 100%; 
         margin-top: 10px;
     }
-    
-    /* Input field itu sendiri */
-    div[data-testid="stTextInput"] > div > div > input {
-        border-radius: 8px;
-        border: 1px solid #ccc;
-    }
 
+    /* Judul di dalam box */
+    .login-container-style h3 {
+        text-align: left;
+        margin-bottom: 20px;
+        color: #333;
+    }
+    
     .main .block-container {
         padding-top: 0;
     }
@@ -165,17 +171,18 @@ if st.session_state.page == "login" and st.session_state.user is None:
     </style>
     """, unsafe_allow_html=True)
     
-    # --- MEMBUAT SATU CONTAINER DI TENGAH ---
-    # st.empty() ditempatkan di luar container untuk memastikan centering bekerja sempurna.
-    
+    # st.empty() ditempatkan di luar container untuk memastikan centering bekerja sempurna
     st.empty() 
     
-    # 1. Gunakan st.container untuk membungkus SEMUA elemen form.
+    # --- MEMBUAT SATU CONTAINER DI TENGAH ---
+    # Gunakan st.container untuk membungkus SEMUA elemen form.
     with st.container():
-        # 2. Berikan class CSS kustom ke container ini menggunakan st.markdown di awal container
+        # Beri class CSS kustom ke container ini.
         st.markdown('<div class="login-container-style">', unsafe_allow_html=True)
 
-        st.subheader("🔑 Login Pengguna")
+        # Ganti st.subheader dengan st.markdown untuk judul di dalam box
+        st.markdown("### 🔑 Login Pengguna") 
+
         email = st.text_input("Email", key="login_email")
         password = st.text_input("Password", type="password", key="login_password")
 
@@ -201,10 +208,10 @@ if st.session_state.page == "login" and st.session_state.user is None:
         if st.button("Daftar Akun Baru", key="goto_register"):
             st.session_state.page = "register"
         
-        # 3. Tutup div kustom
+        # Tutup div kustom
         st.markdown('</div>', unsafe_allow_html=True) 
 
-    st.empty() # st.empty()
+    st.empty()
 
 # ---------------- REGISTER PAGE ----------------
 elif st.session_state.page == "register" and st.session_state.user is None:
