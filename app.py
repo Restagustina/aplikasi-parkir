@@ -6,12 +6,12 @@ import tempfile
 import os
 
 # ---------------- FIREBASE SETUP ----------------
-# File JSON dari Firebase (service account)
-cred = credentials.Certificate("serviceAccountKey.json")
+# Ambil dari secrets
+cred = credentials.Certificate(dict(st.secrets["firebase"]))
 
 if not firebase_admin._apps:
     firebase_admin.initialize_app(cred, {
-        "storageBucket": "parkir-mahasiswa.appspot.com"  # ganti dengan bucket Storage kamu
+        "storageBucket": "parkir-digital.appspot.com"
     })
 
 db = firestore.client()
