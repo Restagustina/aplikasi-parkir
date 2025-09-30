@@ -37,24 +37,23 @@ def log_activity(user_id, action):
     else:
         print(f"Log activity: {action} for user {user_id}")
 
-# --- FUNGSI UTAMA YANG DIMODIFIKASI (OPSI 1) ---
+# --- FUNGSI UTAMA YANG DIMODIFIKASI (MENGGUNAKAN SORTING PYTHON) ---
 
 def get_user_logs(user_id):
     """
     Mengambil log aktivitas pengguna dari Firestore.
-    Menggunakan Opsi 1: Filter di Firestore, pengurutan di Python.
+    Menggunakan filter Firestore, dan pengurutan di Python (Opsi 1)
+    untuk menghindari error FailedPrecondition.
     """
     if db:
         try:
-            # 1. Ambil data DENGAN filter user_id (menghindari Indeks Komposit)
-            # Kueri HANYA menggunakan where() dan limit().
+            # 1. Ambil data HANYA dengan filter user_id (tanpa order_by)
             logs_ref = db.collection("log_activity").where("user_id", "==", user_id).limit(10).stream()
             
             # 2. Konversi hasil kueri ke list dictionaries
             logs = [log.to_dict() for log in logs_ref]
             
             # 3. Urutkan data di sisi Python (client-side sorting)
-            # Mengurutkan berdasarkan 'timestamp' secara Descending (terbaru di atas)
             logs_sorted = sorted(
                 logs, 
                 key=lambda x: x.get('timestamp', firestore.SERVER_TIMESTAMP), 
@@ -342,12 +341,11 @@ elif st.session_state.user:
         st.write(f"Email: {st.session_state.user['email']}")
 
         st.subheader("Log Aktivitas (10 Terbaru)")
-        # Kueri ini menggunakan pengurutan di Python (Opsi 1)
         logs = get_user_logs(user_id) 
         if logs:
             for l in logs:
-                # Menghandle Timestamp object dari Firestore
-                if isinstance(l.get('timestamp'), firebase_admin.firestore.Timestamp):
+                # PERBAIKAN: Menggunakan firestore.Timestamp (Baris 350 pada error lama)
+                if isinstance(l.get('timestamp'), firestore.Timestamp): 
                     ts = l['timestamp'].strftime("%d-%m-%Y %H:%M:%S")
                 else:
                     ts = "Tanggal tidak tersedia"
