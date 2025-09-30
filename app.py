@@ -60,14 +60,33 @@ def set_background(image_file):
         bin_str = get_base64(image_file)
         page_bg_img = f'''
         <style>
-        /* Target Streamlit App Container */
         [data-testid="stAppViewContainer"] {{
             background-image: url("data:image/png;base64,{bin_str}");
             background-size: cover;
             background-repeat: no-repeat;
             background-attachment: fixed;
+            position: relative;
         }}
-        /* Menghapus header Streamlit bawaan */
+
+        /* Overlay buram */
+        [data-testid="stAppViewContainer"]::before {{
+            content: "";
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            background: rgba(255, 255, 255, 0.3); /* Layer transparan */
+            backdrop-filter: blur(6px);           /* Efek buram */
+            z-index: 0;
+        }}
+
+        /* Pastikan konten di atas overlay */
+        [data-testid="stAppViewContainer"] > * {{
+            position: relative;
+            z-index: 1;
+        }}
+
         [data-testid="stHeader"] {{
             background-color: rgba(0,0,0,0);
         }}
