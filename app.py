@@ -1,11 +1,13 @@
 import streamlit as st
 import firebase_admin
-from firebase_admin import credentials, firestore, storage
+from firebase_admin import credentials, storage
+from firebase_admin import firestore # Dipindahkan ke sini untuk menghindari konflik
 import qrcode
 import tempfile
 import os
 import hashlib
 import base64
+import pandas as pd # <-- LANGKAH 1: IMPOR PANDAS
 
 # ---------------- FIREBASE SETUP ----------------
 # Pastikan st.secrets['firebase'] sudah diatur
@@ -21,6 +23,12 @@ except Exception as e:
     st.error(f"Gagal menginisialisasi Firebase. Pastikan st.secrets['firebase'] sudah benar. Error: {e}")
     db = None
     bucket = None
+    # Dummy object jika inisialisasi gagal
+    if 'firestore' not in globals():
+        class DummyFirestore:
+            class Timestamp:
+                pass
+        firestore = DummyFirestore() 
 
 # ---------------- HELPER FUNCTIONS ----------------
 
@@ -36,6 +44,12 @@ def log_activity(user_id, action):
         })
     else:
         print(f"Log activity: {action} for user {user_id}")
+        
+# <-- LANGKAH 2: FUNGSI KONVERSI KE CSV
+@st.cache_data
+def convert_df_to_csv(df):
+    # IMPORTANT: Cache the conversion to prevent computation on every rerun
+    return df.to_csv(index=False).encode('utf-8')
 
 # --- FUNGSI UTAMA (MENGGUNAKAN SORTING PYTHON) ---
 
@@ -48,7 +62,8 @@ def get_user_logs(user_id):
     if db:
         try:
             # 1. Ambil data HANYA dengan filter user_id (tanpa order_by)
-            logs_ref = db.collection("log_activity").where("user_id", "==", user_id).limit(10).stream()
+            # Ambil lebih banyak log (misal 100) untuk tabel
+            logs_ref = db.collection("log_activity").where("user_id", "==", user_id).limit(100).stream()
             
             # 2. Konversi hasil kueri ke list dictionaries
             logs = [log.to_dict() for log in logs_ref]
@@ -283,7 +298,7 @@ if st.session_state.page == "login" and st.session_state.user is None:
                         log_activity(u.id, "login")
                         st.success(f"Selamat datang, {u_data.get('nama')}!")
                         user_found = True
-                        st.rerun() # PERBAIKAN 1/5
+                        st.rerun() 
                         break
                 if not user_found:
                     st.error("Email atau password salah!")
@@ -293,7 +308,7 @@ if st.session_state.page == "login" and st.session_state.user is None:
     # Tombol Daftar Akun Baru (Diletakkan di luar form, tapi tepat di bawahnya)
     if st.button("Daftar Akun Baru", key="goto_register"):
         st.session_state.page = "register"
-        st.rerun() # PERBAIKAN 2/5
+        st.rerun() 
     
     st.empty()
 
@@ -314,7 +329,7 @@ elif st.session_state.page == "register" and st.session_state.user is None:
             if uid:
                 st.success("Akun berhasil dibuat! Silahkan login.")
                 st.session_state.page = "login"
-                st.rerun() # PERBAIKAN 3/5
+                st.rerun() 
             else:
                 st.error("Email sudah terdaftar!")
         else:
@@ -322,7 +337,7 @@ elif st.session_state.page == "register" and st.session_state.user is None:
 
     if st.button("Kembali ke Login", key="back_login"):
         st.session_state.page = "login"
-        st.rerun() # PERBAIKAN 4/5
+        st.rerun() 
 
 # ---------------- APP UTAMA ----------------
 elif st.session_state.user:
@@ -332,7 +347,7 @@ elif st.session_state.user:
         log_activity(st.session_state.user['uid'], "logout")
         st.session_state.user = None
         st.session_state.page = "login"
-        st.rerun() # PERBAIKAN 5/5
+        st.rerun() 
 
     user_id = st.session_state.user['uid']
     st.success(f"Selamat datang, {st.session_state.user['nama']}!")
@@ -344,17 +359,43 @@ elif st.session_state.user:
         st.write(f"NIM: {st.session_state.user['nim']}")
         st.write(f"Email: {st.session_state.user['email']}")
 
-        st.subheader("Log Aktivitas (10 Terbaru)")
+        st.subheader("Log Aktivitas (100 Terbaru)")
         logs = get_user_logs(user_id) 
+        
         if logs:
+            # LANGKAH 3: OLAH DATA LOG KE FORMAT TABEL
+            processed_logs = []
             for l in logs:
-                # Perbaikan: Menggunakan firestore.Timestamp (sudah benar)
-                if isinstance(l.get('timestamp'), firestore.Timestamp): 
-                    ts = l['timestamp'].strftime("%d-%m-%Y %H:%M:%S")
+                # Perbaikan: Menggunakan firebase_admin.firestore.Timestamp untuk resolusi nama lengkap
+                if isinstance(l.get('timestamp'), firebase_admin.firestore.Timestamp): 
+                    # Konversi objek Timestamp ke string yang mudah dibaca
+                    ts_str = l['timestamp'].strftime("%d-%m-%Y %H:%M:%S")
                 else:
-                    ts = "Tanggal tidak tersedia"
-                    
-                st.write(f"{l['action'].capitalize()} → {ts}")
+                    ts_str = "Tanggal tidak tersedia"
+                
+                processed_logs.append({
+                    "Aktivitas": l.get('action', 'N/A').capitalize(),
+                    "Waktu": ts_str
+                })
+            
+            # Buat DataFrame
+            df_logs = pd.DataFrame(processed_logs)
+            
+            # LANGKAH 4: TAMPILKAN TABEL INTERAKTIF
+            st.dataframe(df_logs, use_container_width=True, hide_index=True)
+            
+            # Konversi DataFrame ke CSV
+            csv_data = convert_df_to_csv(df_logs)
+            
+            # LANGKAH 5: TOMBOL DOWNLOAD
+            st.download_button(
+                label="📥 Download Data Log (CSV)",
+                data=csv_data,
+                file_name=f'log_aktivitas_{st.session_state.user["nim"]}.csv',
+                mime='text/csv',
+                use_container_width=True
+            )
+            
         else:
             st.info("Belum ada aktivitas login/logout.")
 
