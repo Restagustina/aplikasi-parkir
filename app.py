@@ -106,25 +106,39 @@ if st.session_state.page == "login" and st.session_state.user is None:
     st.markdown("""
     <style>
     /* 1. CSS untuk menengahkan kontainer utama Streamlit */
-    /* Target div yang membungkus seluruh konten utama Streamlit */
     [data-testid="stAppViewContainer"] > .main {
         display: flex;
         justify-content: center; /* Horizontally center */
         align-items: center; /* Vertically center */
-        padding: 0 !important; /* Hapus padding default Streamlit */
-        min-height: 100vh; /* Pastikan tinggi penuh */
+        padding: 0 !important; 
+        min-height: 100vh;
     }
 
     /* 2. Style untuk Kotak Login */
     .login-box {
-        background-color: rgba(255, 255, 255, 0.9); /* Putih transparan */
+        background-color: rgba(255, 255, 255, 0.9);
         padding: 30px;
         border-radius: 15px;
         box-shadow: 0 8px 30px rgba(0,0,0,0.5); 
-        max-width: 400px; 
-        width: 100%; /* Gunakan lebar penuh dari max-width */
-        margin: auto; /* Membantu penempatan */
-        z-index: 10000; /* Pastikan di atas layer lain */
+        max-width: 450px; /* Lebar Maksimum Kotak Login (Bisa disesuaikan) */
+        width: 100%; 
+        margin: auto;
+    }
+    
+    /* 3. PERBAIKAN UTAMA: Membatasi Lebar Input Teks */
+    .login-box div[data-testid="stTextInput"],
+    .login-box div[data-testid="stTextInput"] > div {
+        /* Memastikan input tidak meregang di luar login-box */
+        max-width: 100%; 
+        width: 100%;
+        margin-left: 0;
+        margin-right: 0;
+    }
+
+    /* Input field itu sendiri */
+    div[data-testid="stTextInput"] > div > div > input {
+        border-radius: 8px;
+        border: 1px solid #ccc;
     }
     
     /* Tombol Login (pertama) */
@@ -143,19 +157,21 @@ if st.session_state.page == "login" and st.session_state.user is None:
         margin-top: 10px;
     }
 
-    /* Streamlit input custom style */
-    div[data-testid="stTextInput"] > div > div > input {
-        border-radius: 8px;
-        border: 1px solid #ccc;
-    }
-    
-    /* Kosongkan margin di atas, karena kita sudah centring (Opsional) */
     .main .block-container {
         padding-top: 0;
     }
     
     </style>
     """, unsafe_allow_html=True)
+    
+    st.markdown('<div class="login-box">', unsafe_allow_html=True)
+    
+.login-box div[data-testid="stTextInput"],
+.login-box div[data-testid="stTextInput"] > div {
+    max-width: 100%; 
+    width: 100%;
+    /* ... */
+}
 
     # Catatan: Kita tidak lagi membutuhkan div.center-container!
     # Konten login langsung dibungkus oleh login-box.
