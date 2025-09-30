@@ -118,28 +118,38 @@ if st.session_state.page == "login" and st.session_state.user is None:
     [data-testid="stForm"] {
         background-color: rgba(255, 255, 255, 0.95);
         padding: 30px;
-        padding-bottom: 20px; /* Kurangi padding bawah untuk tombol */
-        border-radius: 15px 15px 0 0; /* Bulatkan hanya sudut atas */
-        box-shadow: 0 5px 20px rgba(0,0,0,0.2); 
+        padding-bottom: 30px; /* Padding bawah normal, tidak perlu ilusi margin-top */
+        border-radius: 15px; /* Bulatkan semua sudut */
+        box-shadow: 0 10px 40px rgba(0,0,0,0.3); 
         max-width: 450px; 
         width: 100%; 
         margin: auto;
     }
     
-    /* 3. Perbaikan Input (Agar tidak melebar) */
+    /* 3. Perbaikan Input */
     [data-testid="stForm"] div[data-testid="stTextInput"],
     [data-testid="stForm"] div[data-testid="stTextInput"] > div {
         max-width: 100%; 
         width: 100%;
     }
     
-    /* Tombol Login (Tombol Submit Form - PERTAMA) */
+    /* Tombol Login (Tombol Submit Form - di dalam kolom PERTAMA) */
+    /* st.form_submit_button secara default akan menjadi div.stButton:nth-of-type(1) */
     [data-testid="stForm"] div.stButton:nth-of-type(1) > button { 
         width: 100%;
-        margin-top: 15px;
     }
 
-    /* Judul dan Input fields (Biarkan tetap sama) */
+    /* Tombol Daftar Akun Baru (st.button biasa - di dalam kolom KEDUA) */
+    /* st.button akan menjadi div.stButton:nth-of-type(2) di dalam form */
+    [data-testid="stForm"] div.stButton:nth-of-type(2) > button { 
+        background-color:#ff4b4b; /* WARNA MERAH */
+        color:white; 
+        border-radius:6px; /* Sudut tombol normal */
+        border:none; 
+        width: 100%; 
+    }
+
+    /* Judul dan Input fields */
     [data-testid="stForm"] h3 {
         text-align: left;
         margin-bottom: 20px;
@@ -150,18 +160,6 @@ if st.session_state.page == "login" and st.session_state.user is None:
         border: 1px solid #ccc;
     }
     
-    /* Tombol Daftar Akun Baru (Diletakkan di luar form, DIBUAT TERLIHAT MENYATU) */
-    div.stButton:last-of-type > button { 
-        background-color:#ff4b4b; /* WARNA MERAH */
-        color:white; 
-        border-radius:0 0 15px 15px; /* Bulatkan hanya sudut bawah */
-        border:none; 
-        width: 100%; 
-        max-width: 450px; /* Batasi lebarnya sama dengan form */
-        margin-top: -1px; /* Naikkan 1px agar menyatu dengan form di atasnya */
-        height: 3rem; /* Tetapkan tinggi agar tombol merah terlihat bagus */
-    }
-
     .main .block-container {
         padding-top: 0;
     }
@@ -171,15 +169,23 @@ if st.session_state.page == "login" and st.session_state.user is None:
     
     st.empty() 
     
-    # --- FORM (KOTAK LOGIN TUNGGAL, Bagian Atas) ---
+    # --- FORM (KOTAK LOGIN TUNGGAL) ---
     with st.form("login_form", clear_on_submit=False):
         st.markdown("### 🔑 Login Pengguna") 
 
         email = st.text_input("Email", key="login_email")
         password = st.text_input("Password", type="password", key="login_password")
 
-        # Tombol Login (ini adalah tombol submit form, harus ada di dalam)
-        submitted = st.form_submit_button("Login")
+        # Membuat 2 kolom dengan lebar yang sama (1:1)
+        col1, col2 = st.columns(2)
+        
+        # Kolom 1: Tombol Login (Submit Form)
+        with col1:
+            submitted = st.form_submit_button("Login")
+        
+        # Kolom 2: Tombol Daftar Akun Baru (Tombol Biasa)
+        with col2:
+            daftar_clicked = st.button("Daftar Akun Baru", key="goto_register")
 
         # Logika Login HANYA berjalan ketika tombol submit form diklik
         if submitted:
@@ -199,11 +205,11 @@ if st.session_state.page == "login" and st.session_state.user is None:
             else:
                 st.error("Koneksi ke database gagal.")
 
-    # Tombol Daftar Akun Baru (Diletakkan di LUAR form agar berfungsi, 
-    # TAPI DIBUAT TERLIHAT DI DALAM KOTAK dengan CSS)
-    if st.button("Daftar Akun Baru", key="goto_register"):
-        st.session_state.page = "register"
-    
+        # Logika Pindah Halaman (Tombol Daftar Akun Baru)
+        if daftar_clicked:
+            st.session_state.page = "register"
+            st.experimental_rerun() # Disarankan untuk memastikan perpindahan halaman
+
     st.empty()
 
 # ---------------- REGISTER PAGE ----------------
