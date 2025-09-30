@@ -37,7 +37,7 @@ def log_activity(user_id, action):
     else:
         print(f"Log activity: {action} for user {user_id}")
 
-# --- FUNGSI UTAMA YANG DIMODIFIKASI (MENGGUNAKAN SORTING PYTHON) ---
+# --- FUNGSI UTAMA (MENGGUNAKAN SORTING PYTHON) ---
 
 def get_user_logs(user_id):
     """
@@ -139,6 +139,10 @@ if "page" not in st.session_state:
 # --------------------------------------------------------------------------
 
 def get_base64(bin_file):
+    # Pastikan file yang diakses ada
+    if not os.path.exists(bin_file):
+        raise FileNotFoundError(f"File not found: {bin_file}")
+        
     with open(bin_file, 'rb') as f:
         data = f.read()
     return base64.b64encode(data).decode()
@@ -279,7 +283,7 @@ if st.session_state.page == "login" and st.session_state.user is None:
                         log_activity(u.id, "login")
                         st.success(f"Selamat datang, {u_data.get('nama')}!")
                         user_found = True
-                        st.experimental_rerun()
+                        st.rerun() # PERBAIKAN 1/5
                         break
                 if not user_found:
                     st.error("Email atau password salah!")
@@ -289,7 +293,7 @@ if st.session_state.page == "login" and st.session_state.user is None:
     # Tombol Daftar Akun Baru (Diletakkan di luar form, tapi tepat di bawahnya)
     if st.button("Daftar Akun Baru", key="goto_register"):
         st.session_state.page = "register"
-        st.experimental_rerun()
+        st.rerun() # PERBAIKAN 2/5
     
     st.empty()
 
@@ -310,7 +314,7 @@ elif st.session_state.page == "register" and st.session_state.user is None:
             if uid:
                 st.success("Akun berhasil dibuat! Silahkan login.")
                 st.session_state.page = "login"
-                st.experimental_rerun()
+                st.rerun() # PERBAIKAN 3/5
             else:
                 st.error("Email sudah terdaftar!")
         else:
@@ -318,7 +322,7 @@ elif st.session_state.page == "register" and st.session_state.user is None:
 
     if st.button("Kembali ke Login", key="back_login"):
         st.session_state.page = "login"
-        st.experimental_rerun()
+        st.rerun() # PERBAIKAN 4/5
 
 # ---------------- APP UTAMA ----------------
 elif st.session_state.user:
@@ -328,7 +332,7 @@ elif st.session_state.user:
         log_activity(st.session_state.user['uid'], "logout")
         st.session_state.user = None
         st.session_state.page = "login"
-        st.experimental_rerun()
+        st.rerun() # PERBAIKAN 5/5
 
     user_id = st.session_state.user['uid']
     st.success(f"Selamat datang, {st.session_state.user['nama']}!")
@@ -344,7 +348,7 @@ elif st.session_state.user:
         logs = get_user_logs(user_id) 
         if logs:
             for l in logs:
-                # PERBAIKAN: Menggunakan firestore.Timestamp (Baris 350 pada error lama)
+                # Perbaikan: Menggunakan firestore.Timestamp (sudah benar)
                 if isinstance(l.get('timestamp'), firestore.Timestamp): 
                     ts = l['timestamp'].strftime("%d-%m-%Y %H:%M:%S")
                 else:
