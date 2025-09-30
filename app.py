@@ -22,7 +22,8 @@ except Exception as e:
     db = None
     bucket = None
 
-# ---------------- HELPER FUNCTIONS (Diperlukan untuk Logika Login) ----------------
+# ---------------- HELPER FUNCTIONS ----------------
+
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
@@ -36,11 +37,13 @@ def log_activity(user_id, action):
     else:
         print(f"Log activity: {action} for user {user_id}")
 
-# --- FUNGSI FIREBASE YANG HILANG (PENTING UNTUK MENGHILANGKAN NameError) ---
+# --- FUNGSI FIREBASE YANG SEBELUMNYA HILANG ---
 
 def get_user_logs(user_id):
     """Mengambil log aktivitas pengguna dari Firestore."""
     if db:
+        # PENTING: Kueri ini memerlukan indeks komposit di Firebase Console:
+        # Koleksi: log_activity, Bidang: user_id (Asc), timestamp (Desc)
         logs_ref = db.collection("log_activity").where("user_id", "==", user_id).order_by("timestamp", direction=firestore.Query.DESCENDING).limit(10).stream()
         return [log.to_dict() for log in logs_ref]
     return []
@@ -71,7 +74,6 @@ def upload_to_storage(local_path, destination_blob_name):
         try:
             blob = bucket.blob(destination_blob_name)
             blob.upload_from_filename(local_path)
-            # Membuat URL publik untuk diakses
             blob.make_public()
             return blob.public_url
         except Exception as e:
@@ -99,6 +101,8 @@ def save_data_firestore(user_id, nama, nim, plat, jenis, foto_url, qr_url):
 def get_user_vehicles(user_id):
     """Mengambil semua data kendaraan milik pengguna tertentu."""
     if db:
+        # Kueri ini mungkin juga butuh indeks komposit di Firebase Console:
+        # Koleksi: vehicles, Bidang: user_id (Asc)
         vehicles_ref = db.collection("vehicles").where("user_id", "==", user_id).stream()
         return [veh.to_dict() for veh in vehicles_ref]
     return []
@@ -113,10 +117,9 @@ if "page" not in st.session_state:
     st.session_state.page = "login"
 
 # --------------------------------------------------------------------------
-# --- FUNGSI & PANGGILAN BACKGROUND IMAGE (WAJIB DI AWAL SCRIPT) ---
+# --- FUNGSI & PANGGILAN BACKGROUND IMAGE ---
 # --------------------------------------------------------------------------
 
-# Fungsi untuk mengkodekan gambar lokal ke Base64
 def get_base64(bin_file):
     with open(bin_file, 'rb') as f:
         data = f.read()
@@ -234,7 +237,6 @@ if st.session_state.page == "login" and st.session_state.user is None:
     </style>
     """, unsafe_allow_html=True)
     
-    # st.empty() ditempatkan di luar form untuk memastikan centering bekerja sempurna
     st.empty() 
     
     # --- FORM (KOTAK LOGIN TUNGGAL) ---
@@ -286,7 +288,6 @@ elif st.session_state.page == "register" and st.session_state.user is None:
         if reg_password != reg_password2:
             st.error("Password dan konfirmasi tidak sama!")
         elif reg_nama and reg_nim and reg_email and reg_password:
-            # Perhatikan: fungsi register_user sekarang ada di atas
             uid = register_user(reg_nama, reg_nim, reg_email, reg_password) 
             if uid:
                 st.success("Akun berhasil dibuat! Silahkan login.")
@@ -322,11 +323,10 @@ elif st.session_state.user:
         st.write(f"Email: {st.session_state.user['email']}")
 
         st.subheader("Log Aktivitas")
-        # Perhatikan: fungsi get_user_logs sekarang ada di atas
         logs = get_user_logs(user_id) 
         if logs:
             for l in logs:
-                # Firestore timestamp object
+                # Menghandle Timestamp object dari Firestore
                 if isinstance(l.get('timestamp'), firebase_admin.firestore.Timestamp):
                     ts = l['timestamp'].strftime("%d-%m-%Y %H:%M:%S")
                 else:
@@ -373,15 +373,16 @@ elif st.session_state.user:
                     st.error("Gagal mengupload file ke Storage!")
 
                 # Bersihkan file lokal
-                os.remove(tmp_foto_path)
-                os.remove(qr_filename)
+                if os.path.exists(tmp_foto_path):
+                    os.remove(tmp_foto_path)
+                if os.path.exists(qr_filename):
+                    os.remove(qr_filename)
             else:
                 st.error("⚠️ Lengkapi semua data dan upload foto kendaraan.")
 
     # ---------- LIHAT DATA KENDARAAN ----------
     elif menu == "Lihat Data Kendaraan":
         st.header("Data Kendaraan Saya")
-        # Perhatikan: fungsi get_user_vehicles sekarang ada di atas
         data = get_user_vehicles(user_id) 
         if data:
             for d in data:
