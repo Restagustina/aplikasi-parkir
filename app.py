@@ -115,55 +115,55 @@ if st.session_state.page == "login" and st.session_state.user is None:
     }
 
     /* 2. Style untuk Kotak Login */
-    /* Menargetkan container Streamlit dengan class kustom */
-    .login-container-style {
-        background-color: rgba(255, 255, 255, 0.95); /* Sedikit lebih solid */
+    /* Kita menargetkan container yang dibuat oleh st.form (stForm) */
+    [data-testid="stForm"] {
+        background-color: rgba(255, 255, 255, 0.95); /* Kotak putih di tengah */
         padding: 30px;
         border-radius: 15px;
-        box-shadow: 0 10px 40px rgba(0,0,0,0.3); /* Shadow lebih menonjol */
-        max-width: 450px; /* Lebar Maksimum Kotak Login */
+        box-shadow: 0 10px 40px rgba(0,0,0,0.3); 
+        max-width: 450px; /* Lebar Kotak Login */
         width: 100%; 
         margin: auto;
     }
     
-    /* 3. Perbaikan Input: Memastikan input di dalam container mengikuti lebarnya */
-    .login-container-style div[data-testid="stTextInput"],
-    .login-container-style div[data-testid="stTextInput"] > div {
+    /* 3. Perbaikan Input: Input dan tombol di dalam form harus mengisi 100% dari box */
+    [data-testid="stForm"] div[data-testid="stTextInput"],
+    [data-testid="stForm"] div[data-testid="stTextInput"] > div {
         max-width: 100%; 
         width: 100%;
-        margin-left: 0;
-        margin-right: 0;
     }
     
-    /* Input field itu sendiri */
+    /* Styling Tombol di dalam Form (Form hanya memiliki satu tombol, tombol Submit) */
+    [data-testid="stForm"] div.stButton > button { 
+        width: 100%;
+        margin-top: 15px;
+    }
+
+    /* Judul di dalam box */
+    [data-testid="stForm"] h3 {
+        text-align: left;
+        margin-bottom: 20px;
+        color: #333;
+    }
+
+    /* Streamlit input custom style */
     div[data-testid="stTextInput"] > div > div > input {
         border-radius: 8px;
         border: 1px solid #ccc;
     }
     
-    /* Tombol Login (pertama di container) */
-    .login-container-style div.stButton:nth-of-type(1) > button { 
-        width: 100%;
-        margin-top: 15px;
-    }
-
-    /* Tombol Daftar Akun Baru (kedua di container) */
-    .login-container-style div.stButton:nth-of-type(2) > button { 
+    /* Tombol Daftar Akun Baru (SEKARANG DI LUAR FORM) */
+    /* Kita menargetkan tombol 'Daftar' yang diletakkan persis di bawah form */
+    div.stButton:last-of-type > button { 
         background-color:#ff4b4b; 
         color:white; 
         border-radius:10px; 
         border:none; 
         width: 100%; 
+        max-width: 450px; /* Batasi lebarnya sama dengan form */
         margin-top: 10px;
     }
 
-    /* Judul di dalam box */
-    .login-container-style h3 {
-        text-align: left;
-        margin-bottom: 20px;
-        color: #333;
-    }
-    
     .main .block-container {
         padding-top: 0;
     }
@@ -171,23 +171,21 @@ if st.session_state.page == "login" and st.session_state.user is None:
     </style>
     """, unsafe_allow_html=True)
     
-    # st.empty() ditempatkan di luar container untuk memastikan centering bekerja sempurna
+    # st.empty() ditempatkan di luar form untuk memastikan centering bekerja sempurna
     st.empty() 
     
-    # --- MEMBUAT SATU CONTAINER DI TENGAH ---
-    # Gunakan st.container untuk membungkus SEMUA elemen form.
-    with st.container():
-        # Beri class CSS kustom ke container ini.
-        st.markdown('<div class="login-container-style">', unsafe_allow_html=True)
-
-        # Ganti st.subheader dengan st.markdown untuk judul di dalam box
+    # --- FORM (KOTAK LOGIN TUNGGAL) ---
+    with st.form("login_form", clear_on_submit=False):
         st.markdown("### 🔑 Login Pengguna") 
 
         email = st.text_input("Email", key="login_email")
         password = st.text_input("Password", type="password", key="login_password")
 
-        # Pastikan db sudah terinisialisasi sebelum digunakan
-        if st.button("Login", key="btn_login"):
+        # Tombol Login (ini adalah tombol submit form)
+        submitted = st.form_submit_button("Login")
+
+        # Logika Login HANYA berjalan ketika tombol submit form diklik
+        if submitted:
             if db:
                 users = db.collection("users").where("email", "==", email).stream()
                 user_found = False
@@ -202,15 +200,12 @@ if st.session_state.page == "login" and st.session_state.user is None:
                 if not user_found:
                     st.error("Email atau password salah!")
             else:
-                st.error("Koneksi ke database gagal. Silahkan periksa konfigurasi Firebase Anda.")
+                st.error("Koneksi ke database gagal.")
 
-        # Tombol daftar
-        if st.button("Daftar Akun Baru", key="goto_register"):
-            st.session_state.page = "register"
-        
-        # Tutup div kustom
-        st.markdown('</div>', unsafe_allow_html=True) 
-
+    # Tombol Daftar Akun Baru (Diletakkan di luar form, tapi tepat di bawahnya)
+    if st.button("Daftar Akun Baru", key="goto_register"):
+        st.session_state.page = "register"
+    
     st.empty()
 
 # ---------------- REGISTER PAGE ----------------
