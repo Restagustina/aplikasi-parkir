@@ -1,13 +1,13 @@
 import streamlit as st
 import firebase_admin
-from firebase_admin import credentials, storage
-from firebase_admin import firestore # Dipindahkan ke sini untuk menghindari konflik
+# Mengembalikan impor ke format yang lebih standar
+from firebase_admin import credentials, firestore, storage 
 import qrcode
 import tempfile
 import os
 import hashlib
 import base64
-import pandas as pd # <-- LANGKAH 1: IMPOR PANDAS
+import pandas as pd
 
 # ---------------- FIREBASE SETUP ----------------
 # Pastikan st.secrets['firebase'] sudah diatur
@@ -23,12 +23,6 @@ except Exception as e:
     st.error(f"Gagal menginisialisasi Firebase. Pastikan st.secrets['firebase'] sudah benar. Error: {e}")
     db = None
     bucket = None
-    # Dummy object jika inisialisasi gagal
-    if 'firestore' not in globals():
-        class DummyFirestore:
-            class Timestamp:
-                pass
-        firestore = DummyFirestore() 
 
 # ---------------- HELPER FUNCTIONS ----------------
 
@@ -45,10 +39,8 @@ def log_activity(user_id, action):
     else:
         print(f"Log activity: {action} for user {user_id}")
         
-# <-- LANGKAH 2: FUNGSI KONVERSI KE CSV
 @st.cache_data
 def convert_df_to_csv(df):
-    # IMPORTANT: Cache the conversion to prevent computation on every rerun
     return df.to_csv(index=False).encode('utf-8')
 
 # --- FUNGSI UTAMA (MENGGUNAKAN SORTING PYTHON) ---
@@ -56,19 +48,13 @@ def convert_df_to_csv(df):
 def get_user_logs(user_id):
     """
     Mengambil log aktivitas pengguna dari Firestore.
-    Menggunakan filter Firestore, dan pengurutan di Python (Opsi 1)
-    untuk menghindari error FailedPrecondition.
     """
     if db:
         try:
-            # 1. Ambil data HANYA dengan filter user_id (tanpa order_by)
-            # Ambil lebih banyak log (misal 100) untuk tabel
             logs_ref = db.collection("log_activity").where("user_id", "==", user_id).limit(100).stream()
             
-            # 2. Konversi hasil kueri ke list dictionaries
             logs = [log.to_dict() for log in logs_ref]
             
-            # 3. Urutkan data di sisi Python (client-side sorting)
             logs_sorted = sorted(
                 logs, 
                 key=lambda x: x.get('timestamp', firestore.SERVER_TIMESTAMP), 
@@ -86,10 +72,9 @@ def get_user_logs(user_id):
 def register_user(nama, nim, email, password):
     """Mendaftarkan pengguna baru ke Firestore."""
     if db:
-        # Cek apakah email sudah ada
         users_ref = list(db.collection("users").where("email", "==", email).limit(1).get())
         if users_ref:
-            return None # Email sudah terdaftar
+            return None
 
         hashed_password = hash_password(password)
         doc_ref = db.collection("users").add({
@@ -154,10 +139,12 @@ if "page" not in st.session_state:
 # --------------------------------------------------------------------------
 
 def get_base64(bin_file):
-    # Pastikan file yang diakses ada
     if not os.path.exists(bin_file):
-        raise FileNotFoundError(f"File not found: {bin_file}")
-        
+        # Handle the case where the image file is not found
+        st.error(f"File gambar '{bin_file}' tidak ditemukan.")
+        # Return a simple 1x1 transparent PNG base64 string to prevent other errors
+        return "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+
     with open(bin_file, 'rb') as f:
         data = f.read()
     return base64.b64encode(data).decode()
@@ -200,8 +187,9 @@ def set_background(image_file):
         </style>
         '''
         st.markdown(page_bg_img, unsafe_allow_html=True)
-    except FileNotFoundError:
-        st.warning(f"PERINGATAN: File gambar '{image_file}' tidak ditemukan. Latar belakang tidak diterapkan.")
+    except Exception as e:
+        # Menangkap error dari get_base64 jika file tidak ditemukan
+        st.warning(f"PERINGATAN: Latar belakang tidak diterapkan. Error detail: {e}")
 
 # PANGGIL FUNGSI LATAR BELAKANG DI SINI
 set_background('BG FASILKOM.jpg')
@@ -363,31 +351,33 @@ elif st.session_state.user:
         logs = get_user_logs(user_id) 
         
         if logs:
-            # LANGKAH 3: OLAH DATA LOG KE FORMAT TABEL
             processed_logs = []
             for l in logs:
-                # Perbaikan: Menggunakan firebase_admin.firestore.Timestamp untuk resolusi nama lengkap
-                if isinstance(l.get('timestamp'), firebase_admin.firestore.Timestamp): 
-                    # Konversi objek Timestamp ke string yang mudah dibaca
-                    ts_str = l['timestamp'].strftime("%d-%m-%Y %H:%M:%S")
-                else:
-                    ts_str = "Tanggal tidak tersedia"
+                try:
+                    # OPSI FINAL: Coba format langsung. Gunakan try-except untuk menangani kegagalan.
+                    # Asumsi bahwa l['timestamp'] adalah objek Timestamp atau None/string lain.
+                    ts_obj = l.get('timestamp')
+                    if ts_obj:
+                        ts_str = ts_obj.strftime("%d-%m-%Y %H:%M:%S")
+                    else:
+                        ts_str = "Tanggal tidak tersedia"
+                except AttributeError:
+                    # Jika gagal (misalnya, jika ts_obj adalah string atau tipe data lain yang tidak memiliki .strftime)
+                    ts_str = "Error Konversi Waktu"
+                except Exception:
+                    ts_str = "Data Waktu Rusak"
                 
                 processed_logs.append({
                     "Aktivitas": l.get('action', 'N/A').capitalize(),
                     "Waktu": ts_str
                 })
             
-            # Buat DataFrame
             df_logs = pd.DataFrame(processed_logs)
             
-            # LANGKAH 4: TAMPILKAN TABEL INTERAKTIF
             st.dataframe(df_logs, use_container_width=True, hide_index=True)
             
-            # Konversi DataFrame ke CSV
             csv_data = convert_df_to_csv(df_logs)
             
-            # LANGKAH 5: TOMBOL DOWNLOAD
             st.download_button(
                 label="📥 Download Data Log (CSV)",
                 data=csv_data,
