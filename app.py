@@ -36,6 +36,73 @@ def log_activity(user_id, action):
     else:
         print(f"Log activity: {action} for user {user_id}")
 
+# --- FUNGSI FIREBASE YANG HILANG (PENTING UNTUK MENGHILANGKAN NameError) ---
+
+def get_user_logs(user_id):
+    """Mengambil log aktivitas pengguna dari Firestore."""
+    if db:
+        logs_ref = db.collection("log_activity").where("user_id", "==", user_id).order_by("timestamp", direction=firestore.Query.DESCENDING).limit(10).stream()
+        return [log.to_dict() for log in logs_ref]
+    return []
+
+def register_user(nama, nim, email, password):
+    """Mendaftarkan pengguna baru ke Firestore."""
+    if db:
+        # Cek apakah email sudah ada
+        users_ref = list(db.collection("users").where("email", "==", email).limit(1).get())
+        if users_ref:
+            return None # Email sudah terdaftar
+
+        hashed_password = hash_password(password)
+        doc_ref = db.collection("users").add({
+            "nama": nama,
+            "nim": nim,
+            "email": email,
+            "password_hash": hashed_password,
+            "role": "user",
+            "created_at": firestore.SERVER_TIMESTAMP
+        })
+        return doc_ref[1].id
+    return None
+
+def upload_to_storage(local_path, destination_blob_name):
+    """Mengunggah file ke Firebase Storage."""
+    if bucket:
+        try:
+            blob = bucket.blob(destination_blob_name)
+            blob.upload_from_filename(local_path)
+            # Membuat URL publik untuk diakses
+            blob.make_public()
+            return blob.public_url
+        except Exception as e:
+            st.error(f"Gagal upload ke Storage: {e}")
+            return None
+    return None
+
+def save_data_firestore(user_id, nama, nim, plat, jenis, foto_url, qr_url):
+    """Menyimpan data kendaraan ke Firestore."""
+    if db:
+        db.collection("vehicles").add({
+            "user_id": user_id,
+            "nama": nama,
+            "nim": nim,
+            "plat": plat,
+            "jenis": jenis,
+            "foto_url": foto_url,
+            "qr_url": qr_url,
+            "status": "pending",
+            "created_at": firestore.SERVER_TIMESTAMP
+        })
+        return True
+    return False
+
+def get_user_vehicles(user_id):
+    """Mengambil semua data kendaraan milik pengguna tertentu."""
+    if db:
+        vehicles_ref = db.collection("vehicles").where("user_id", "==", user_id).stream()
+        return [veh.to_dict() for veh in vehicles_ref]
+    return []
+
 # ---------------- STREAMLIT APP ----------------
 st.set_page_config(page_title="Digital ID Parkir Mahasiswa", page_icon="🅿️", layout="wide")
 
@@ -77,7 +144,7 @@ def set_background(image_file):
             bottom: 0;
             left: 0;
             background: rgba(0, 0, 0, 0.5); /* Layer transparan */
-            backdrop-filter: blur(8px);           /* Efek buram */
+            backdrop-filter: blur(8px);    /* Efek buram */
             z-index: 0;
         }}
 
@@ -97,10 +164,8 @@ def set_background(image_file):
         st.warning(f"PERINGATAN: File gambar '{image_file}' tidak ditemukan. Latar belakang tidak diterapkan.")
 
 # PANGGIL FUNGSI LATAR BELAKANG DI SINI
-# Ganti 'BG FASILKOM.png' jika format atau namanya berbeda
 set_background('BG FASILKOM.jpg')
 
-# ---------------- LOGIN PAGE ----------------
 # ---------------- LOGIN PAGE ----------------
 if st.session_state.page == "login" and st.session_state.user is None:
     st.markdown("""
@@ -115,7 +180,6 @@ if st.session_state.page == "login" and st.session_state.user is None:
     }
 
     /* 2. Style untuk Kotak Login */
-    /* Kita menargetkan container yang dibuat oleh st.form (stForm) */
     [data-testid="stForm"] {
         background-color: rgba(255, 255, 255, 0.95); /* Kotak putih di tengah */
         padding: 30px;
@@ -153,7 +217,6 @@ if st.session_state.page == "login" and st.session_state.user is None:
     }
     
     /* Tombol Daftar Akun Baru (SEKARANG DI LUAR FORM) */
-    /* Kita menargetkan tombol 'Daftar' yang diletakkan persis di bawah form */
     div.stButton:last-of-type > button { 
         background-color:#ff4b4b; 
         color:white; 
@@ -184,7 +247,7 @@ if st.session_state.page == "login" and st.session_state.user is None:
         # Tombol Login (ini adalah tombol submit form)
         submitted = st.form_submit_button("Login")
 
-        # Logika Login HANYA berjalan ketika tombol submit form diklik
+        # Logika Login HANYA berjalan ketika tombol submit form diklik (termasuk menekan ENTER)
         if submitted:
             if db:
                 users = db.collection("users").where("email", "==", email).stream()
@@ -196,6 +259,7 @@ if st.session_state.page == "login" and st.session_state.user is None:
                         log_activity(u.id, "login")
                         st.success(f"Selamat datang, {u_data.get('nama')}!")
                         user_found = True
+                        st.experimental_rerun()
                         break
                 if not user_found:
                     st.error("Email atau password salah!")
@@ -205,6 +269,7 @@ if st.session_state.page == "login" and st.session_state.user is None:
     # Tombol Daftar Akun Baru (Diletakkan di luar form, tapi tepat di bawahnya)
     if st.button("Daftar Akun Baru", key="goto_register"):
         st.session_state.page = "register"
+        st.experimental_rerun()
     
     st.empty()
 
@@ -221,10 +286,12 @@ elif st.session_state.page == "register" and st.session_state.user is None:
         if reg_password != reg_password2:
             st.error("Password dan konfirmasi tidak sama!")
         elif reg_nama and reg_nim and reg_email and reg_password:
-            uid = register_user(reg_nama, reg_nim, reg_email, reg_password)
+            # Perhatikan: fungsi register_user sekarang ada di atas
+            uid = register_user(reg_nama, reg_nim, reg_email, reg_password) 
             if uid:
                 st.success("Akun berhasil dibuat! Silahkan login.")
                 st.session_state.page = "login"
+                st.experimental_rerun()
             else:
                 st.error("Email sudah terdaftar!")
         else:
@@ -232,6 +299,7 @@ elif st.session_state.page == "register" and st.session_state.user is None:
 
     if st.button("Kembali ke Login", key="back_login"):
         st.session_state.page = "login"
+        st.experimental_rerun()
 
 # ---------------- APP UTAMA ----------------
 elif st.session_state.user:
@@ -254,10 +322,16 @@ elif st.session_state.user:
         st.write(f"Email: {st.session_state.user['email']}")
 
         st.subheader("Log Aktivitas")
-        logs = get_user_logs(user_id)
+        # Perhatikan: fungsi get_user_logs sekarang ada di atas
+        logs = get_user_logs(user_id) 
         if logs:
             for l in logs:
-                ts = l['timestamp'].strftime("%d-%m-%Y %H:%M:%S") if l['timestamp'] else "-"
+                # Firestore timestamp object
+                if isinstance(l.get('timestamp'), firebase_admin.firestore.Timestamp):
+                    ts = l['timestamp'].strftime("%d-%m-%Y %H:%M:%S")
+                else:
+                    ts = "Tanggal tidak tersedia"
+                    
                 st.write(f"{l['action'].capitalize()} → {ts}")
         else:
             st.info("Belum ada aktivitas login/logout.")
@@ -273,23 +347,33 @@ elif st.session_state.user:
 
         if st.button("Daftar Kendaraan"):
             if nama and nim and plat and jenis and foto:
-                tmp_foto = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-                tmp_foto.write(foto.getbuffer())
-                tmp_foto.close()
-                foto_url = upload_to_storage(tmp_foto.name, f"foto/{plat}.png")
+                tmp_dir = tempfile.gettempdir()
+                # Simpan foto ke temp file
+                tmp_foto_path = os.path.join(tmp_dir, f"{plat}_foto.png")
+                with open(tmp_foto_path, "wb") as f:
+                    f.write(foto.getbuffer())
+                
+                # Upload foto
+                foto_url = upload_to_storage(tmp_foto_path, f"foto/{plat}.png")
 
+                # Buat dan simpan QR Code
                 qr_data = f"{nama}-{nim}-{plat}"
-                qr_filename = f"qr_{plat}.png"
+                qr_filename = os.path.join(tmp_dir, f"qr_{plat}.png")
                 img = qrcode.make(qr_data)
                 img.save(qr_filename)
                 qr_url = upload_to_storage(qr_filename, f"qr/{qr_filename}")
 
-                save_data_firestore(user_id, nama, nim, plat, jenis, foto_url, qr_url)
+                if foto_url and qr_url:
+                    # Simpan data ke Firestore
+                    save_data_firestore(user_id, nama, nim, plat, jenis, foto_url, qr_url)
 
-                st.success("✅ Data kendaraan berhasil disimpan!")
-                st.image(qr_filename, caption="QR Code Parkir Anda")
+                    st.success("✅ Data kendaraan berhasil disimpan!")
+                    st.image(qr_filename, caption="QR Code Parkir Anda")
+                else:
+                    st.error("Gagal mengupload file ke Storage!")
 
-                os.remove(tmp_foto.name)
+                # Bersihkan file lokal
+                os.remove(tmp_foto_path)
                 os.remove(qr_filename)
             else:
                 st.error("⚠️ Lengkapi semua data dan upload foto kendaraan.")
@@ -297,11 +381,12 @@ elif st.session_state.user:
     # ---------- LIHAT DATA KENDARAAN ----------
     elif menu == "Lihat Data Kendaraan":
         st.header("Data Kendaraan Saya")
-        data = get_user_vehicles(user_id)
+        # Perhatikan: fungsi get_user_vehicles sekarang ada di atas
+        data = get_user_vehicles(user_id) 
         if data:
             for d in data:
-                st.subheader(f"{d['nama']} ({d['nim']})")
-                st.write(f"Plat: {d['plat']} | Jenis: {d['jenis']}")
+                st.subheader(f"{d['plat']} ({d['jenis']})")
+                st.write(f"Pemilik: {d['nama']} ({d['nim']})")
                 st.image(d["foto_url"], caption="Foto Kendaraan", width=200)
                 st.image(d["qr_url"], caption="QR Code", width=150)
                 st.markdown("---")
