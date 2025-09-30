@@ -15,7 +15,9 @@ try:
     cred = credentials.Certificate(dict(st.secrets["firebase"]))
     if not firebase_admin._apps:
         firebase_admin.initialize_app(cred, {
-            "storageBucket": "parkir-digital.appspot.com"
+            # PERBAIKAN ERROR 404: Gunakan ID Proyek Anda saja
+            # Jika ID proyek Anda 'parkir-digital', ini sudah benar.
+            "storageBucket": "parkir-digital" 
         })
     db = firestore.client()
     bucket = storage.bucket()
