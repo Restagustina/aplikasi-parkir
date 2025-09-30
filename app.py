@@ -114,9 +114,8 @@ if st.session_state.page == "login" and st.session_state.user is None:
         padding: 0 !important; 
         min-height: 100vh;
     }
-    
+
     /* 2. Style untuk Kotak Login (Target: Login Container Kustom) */
-    /* Ini mendefinisikan tampilan kotak putih */
     .login-container-style {
         background-color: rgba(255, 255, 255, 0.95);
         padding: 30px;
@@ -131,7 +130,7 @@ if st.session_state.page == "login" and st.session_state.user is None:
     .login-container-style [data-testid="stTextInput"] {
         max-width: 100%; 
         width: 100%;
-        margin-bottom: 0.5rem; /* Tambahkan sedikit ruang di bawah input */
+        margin-bottom: 0.5rem; 
     }
     
     /* Style Tombol Login (st.button pertama di kolom) */
@@ -147,7 +146,7 @@ if st.session_state.page == "login" and st.session_state.user is None:
         border-radius:6px; 
         border:none; 
         width: 100%;
-        margin-top: 15px; /* Sesuaikan agar sejajar dengan tombol Login */
+        margin-top: 15px; 
     }
 
     /* Judul di dalam box */
@@ -165,9 +164,11 @@ if st.session_state.page == "login" and st.session_state.user is None:
     </style>
     """, unsafe_allow_html=True)
 
+    # st.empty() di sini sangat penting untuk memastikan centering bekerja
     st.empty() 
 
     # --- KOTAK LOGIN DENGAN DIV KUSTOM (DIJAMIN DI TENGAH) ---
+    
     # Membuka div kustom
     st.markdown('<div class="login-container-style">', unsafe_allow_html=True)
     
@@ -191,6 +192,7 @@ if st.session_state.page == "login" and st.session_state.user is None:
     # Logika Login
     if login_clicked:
         if db:
+            # Panggil fungsi login dan logika session state Anda di sini
             users = db.collection("users").where("email", "==", email).stream()
             user_found = False
             for u in users:
@@ -215,8 +217,9 @@ if st.session_state.page == "login" and st.session_state.user is None:
     # Menutup div kustom
     st.markdown('</div>', unsafe_allow_html=True)
 
+    # st.empty() di sini juga penting untuk menyeimbangkan layout
     st.empty()
-
+    
 # ---------------- REGISTER PAGE ----------------
 elif st.session_state.page == "register" and st.session_state.user is None:
     st.subheader("📝 Form Registrasi User Baru")
