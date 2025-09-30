@@ -77,7 +77,7 @@ def set_background(image_file):
             bottom: 0;
             left: 0;
             background: rgba(0, 0, 0, 0.5); /* Layer transparan */
-            backdrop-filter: blur(6px);           /* Efek buram */
+            backdrop-filter: blur(8px);           /* Efek buram */
             z-index: 0;
         }}
 
@@ -105,133 +105,87 @@ set_background('BG FASILKOM.jpg')
 if st.session_state.page == "login" and st.session_state.user is None:
     st.markdown("""
     <style>
-    /* ... CSS Centering, Form, Input, Judul (Biarkan tetap sama) ... */
-    
-    /* 2. Style untuk Kotak Login (Target: stForm) */
-    [data-testid="stForm"] {
-        background-color: rgba(255, 255, 255, 0.95);
-        padding: 30px;
-        /* Hapus padding-bottom dan atur margin bawah */
-        border-radius: 15px;
-        box-shadow: 0 10px 40px rgba(0,0,0,0.3); 
-        max-width: 450px; 
-        width: 100%; 
-        margin: auto;
-        margin-bottom: 10px; /* Tambahkan sedikit jarak ke tombol di bawahnya */
-    }
-
-    /* CSS untuk Tombol di Luar Form (Kolom Tombol) */
-    /* Target kolom tombol untuk penyesuaian margin */
-    .button-container {
+    /* 1. CSS untuk menengahkan kontainer utama Streamlit */
+    [data-testid="stAppViewContainer"] > .main {
         display: flex;
-        justify-content: center; /* Menengahkan kolom tombol di bawah form */
-        max-width: 450px;
-        margin: auto;
+        justify-content: center; /* Horizontally center */
+        align-items: center; /* Vertically center */
+        padding: 0 !important; 
+        min-height: 100vh;
     }
-    
-    /* Style untuk Tombol Daftar Akun Baru */
-    div.stButton:last-of-type > button { 
-        background-color:#ff4b4b; /* WARNA MERAH */
-        color:white; 
-        border-radius:6px;
-        border:none; 
-        width: 100%; 
-    }
-    
-    /* KODE BARU: Tombol Login (yang sekarang st.button biasa) */
-    /* Ini menargetkan tombol pertama di kolom tombol */
-    .button-container > div:first-child button {
-        width: 100%;
-    }
-    
-    /* ... CSS Perbaikan Input, Judul, dll. (Biarkan tetap sama) ... */
 
-    </style>
-    """, unsafe_allow_html=True)
-    
-    st.empty() 
-    
-    # --- FORM (HANYA UNTUK INPUT, BUKAN TOMBOL) ---
-    with st.form("login_input_form", clear_on_submit=False):
-        st.markdown("### 🔑 Login Pengguna") 
-        email = st.text_input("Email", key="login_email")
-        password = st.text_input("Password", type="password", key="login_password")
-        
-        # NOTE: st.form_submit_button HARUS ada di dalam form. Kita akan menggunakannya
-        # untuk memicu logika login, tapi tombol visualnya akan kita ganti.
-        # Kita buat tombol ini 'sembunyi' dan gunakan logika di tombol luar.
-        # Atau lebih baik, kita ubah form ini menjadi container.
-
-    # --- KITA KELUARKAN INPUT DARI st.form dan masukkan ke st.container ---
-    # Karena kita ingin tombol dipisah, lebih baik menggunakan st.container
-    # untuk input agar tidak ada konflik submit.
-    
-    # KODE PERBAIKAN TOTAL: Kembali ke st.container untuk Input + Tombol di Kolom
-    
-    st.markdown("""
-    <style>
-    /* ... (CSS Centering) ... */
-    
-    /* Style untuk Kotak Login (Target: Login Container) */
-    .login-container-style {
-        background-color: rgba(255, 255, 255, 0.95);
+    /* 2. Style untuk Kotak Login */
+    /* Kita menargetkan container yang dibuat oleh st.form (stForm) */
+    [data-testid="stForm"] {
+        background-color: rgba(255, 255, 255, 0.95); /* Kotak putih di tengah */
         padding: 30px;
         border-radius: 15px;
         box-shadow: 0 10px 40px rgba(0,0,0,0.3); 
-        max-width: 450px; 
+        max-width: 450px; /* Lebar Kotak Login */
         width: 100%; 
         margin: auto;
     }
-
-    /* Perbaikan Input (Agar tidak melebar di container) */
-    .login-container-style div[data-testid="stTextInput"],
-    .login-container-style div[data-testid="stTextInput"] > div {
+    
+    /* 3. Perbaikan Input: Input dan tombol di dalam form harus mengisi 100% dari box */
+    [data-testid="stForm"] div[data-testid="stTextInput"],
+    [data-testid="stForm"] div[data-testid="stTextInput"] > div {
         max-width: 100%; 
         width: 100%;
     }
+    
+    /* Styling Tombol di dalam Form (Form hanya memiliki satu tombol, tombol Submit) */
+    [data-testid="stForm"] div.stButton > button { 
+        width: 100%;
+        margin-top: 15px;
+    }
 
-    /* Style Tombol Login (Sekarang st.button pertama di kolom) */
-    .login-container-style div.stButton:first-child button {
-        width: 100%;
+    /* Judul di dalam box */
+    [data-testid="stForm"] h3 {
+        text-align: left;
+        margin-bottom: 20px;
+        color: #333;
+    }
+
+    /* Streamlit input custom style */
+    div[data-testid="stTextInput"] > div > div > input {
+        border-radius: 8px;
+        border: 1px solid #ccc;
     }
     
-    /* Style Tombol Daftar Akun Baru (Sekarang st.button kedua di kolom) */
-    .login-container-style div.stButton:last-child button {
-        background-color:#ff4b4b; /* WARNA MERAH */
+    /* Tombol Daftar Akun Baru (SEKARANG DI LUAR FORM) */
+    /* Kita menargetkan tombol 'Daftar' yang diletakkan persis di bawah form */
+    div.stButton:last-of-type > button { 
+        background-color:#ff4b4b; 
         color:white; 
-        border-radius:6px; 
+        border-radius:10px; 
         border:none; 
-        width: 100%;
+        width: 100%; 
+        max-width: 450px; /* Batasi lebarnya sama dengan form */
+        margin-top: 10px;
     }
-    
-    /* ... (CSS Input dan Judul tetap sama) ... */
+
+    .main .block-container {
+        padding-top: 0;
+    }
     
     </style>
     """, unsafe_allow_html=True)
-
+    
+    # st.empty() ditempatkan di luar form untuk memastikan centering bekerja sempurna
     st.empty() 
-
-    # --- CONTAINER (KOTAK LOGIN TUNGGAL) ---
-    with st.container():
-        st.markdown('<div class="login-container-style">', unsafe_allow_html=True)
+    
+    # --- FORM (KOTAK LOGIN TUNGGAL) ---
+    with st.form("login_form", clear_on_submit=False):
         st.markdown("### 🔑 Login Pengguna") 
 
         email = st.text_input("Email", key="login_email")
         password = st.text_input("Password", type="password", key="login_password")
 
-        # Membuat 2 kolom untuk tombol
-        col1, col2 = st.columns(2)
-        
-        # Kolom 1: Tombol Login (Tombol Biasa)
-        with col1:
-            login_clicked = st.button("Login", key="btn_login")
-        
-        # Kolom 2: Tombol Daftar Akun Baru (Tombol Biasa)
-        with col2:
-            daftar_clicked = st.button("Daftar Akun Baru", key="goto_register")
+        # Tombol Login (ini adalah tombol submit form)
+        submitted = st.form_submit_button("Login")
 
-        # Logika Login
-        if login_clicked:
+        # Logika Login HANYA berjalan ketika tombol submit form diklik
+        if submitted:
             if db:
                 users = db.collection("users").where("email", "==", email).stream()
                 user_found = False
@@ -242,20 +196,16 @@ if st.session_state.page == "login" and st.session_state.user is None:
                         log_activity(u.id, "login")
                         st.success(f"Selamat datang, {u_data.get('nama')}!")
                         user_found = True
-                        st.experimental_rerun()
                         break
                 if not user_found:
                     st.error("Email atau password salah!")
             else:
                 st.error("Koneksi ke database gagal.")
 
-        # Logika Pindah Halaman
-        if daftar_clicked:
-            st.session_state.page = "register"
-            st.experimental_rerun()
-        
-        st.markdown('</div>', unsafe_allow_html=True)
-
+    # Tombol Daftar Akun Baru (Diletakkan di luar form, tapi tepat di bawahnya)
+    if st.button("Daftar Akun Baru", key="goto_register"):
+        st.session_state.page = "register"
+    
     st.empty()
 
 # ---------------- REGISTER PAGE ----------------
