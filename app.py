@@ -5,6 +5,7 @@ import qrcode
 import tempfile
 import os
 import hashlib
+import base64
 
 # ---------------- FIREBASE SETUP ----------------
 cred = credentials.Certificate(dict(st.secrets["firebase"]))
@@ -84,16 +85,88 @@ if "user" not in st.session_state:
 if "page" not in st.session_state:
     st.session_state.page = "login"  # login atau register
 
+# --- Fungsi untuk Background Image ---
+def get_base64(bin_file):
+    with open(bin_file, 'rb') as f:
+        data = f.read()
+    return base64.b64encode(data).decode()
+
+def set_background(image_file):
+    bin_str = get_base64(image_file)
+    page_bg_img = f'''
+    <style>
+    .stApp {{
+        background-image: url("data:image/png;base64,{bin_str}");
+        background-size: cover;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+    }}
+    /* Menghapus header Streamlit bawaan (opsional, agar gambar full) */
+    .stApp > header {{
+        background-color: rgba(0,0,0,0); 
+    }}
+    </style>
+    '''
+    st.markdown(page_bg_img, unsafe_allow_html=True)
+
 # ---------------- LOGIN PAGE ----------------
 if st.session_state.page == "login" and st.session_state.user is None:
     st.markdown("""
     <style>
-    .login-box {background-color:#f0f8ff; padding:30px; border-radius:15px; box-shadow:0 0 10px rgba(0,0,0,0.1);}
-    .btn-register {background-color:#ff4b4b; color:white; padding:10px 20px; border-radius:10px; border:none; cursor:pointer;}
+    /* CSS untuk background sudah dipindahkan ke fungsi set_background */
+
+    /* Container untuk menengahkan login box di tengah halaman */
+    .center-container {
+        display: flex;
+        justify-content: center; /* Horizontally center */
+        align-items: center; /* Vertically center */
+        height: 100vh; /* Tinggi penuh viewport */
+        width: 100vw;
+        position: fixed; /* Tetapkan posisi agar tidak terpengaruh konten lain */
+        top: 0;
+        left: 0;
+        z-index: 9999; /* Pastikan di atas konten lain */
+    }
+    
+    .login-box {
+        background-color: rgba(255, 255, 255, 0.9); /* Ubah ke putih transparan agar background terlihat */
+        padding: 30px;
+        border-radius: 15px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+        max-width: 400px; /* Batasi lebar box */
+        width: 90%; /* Agar responsif */
+    }
+    
+    .btn-register {
+        background-color:#ff4b4b; 
+        color:white; 
+        padding:10px 20px; 
+        border-radius:10px; 
+        border:none; 
+        cursor:pointer;
+        width: 100%; /* Agar tombol selebar login box */
+        margin-top: 10px; /* Jarak dari tombol login */
+    }
+
+    /* CSS tambahan untuk meratakan tombol Daftar Akun Baru */
+    div.stButton > button:last-child {
+        width: 100%;
+        margin-top: 10px;
+    }
+
+    /* Streamlit input custom style (Opsional: agar input terlihat lebih baik di box) */
+    div[data-testid="stTextInput"] > div > div > input {
+        border-radius: 8px;
+        border: 1px solid #ccc;
+    }
+    
     </style>
     """, unsafe_allow_html=True)
 
+    # Wrap login box dengan center-container
+    st.markdown('<div class="center-container">', unsafe_allow_html=True)
     st.markdown('<div class="login-box">', unsafe_allow_html=True)
+    
     st.subheader("🔑 Login Pengguna")
     email = st.text_input("Email", key="login_email")
     password = st.text_input("Password", type="password", key="login_password")
@@ -113,10 +186,13 @@ if st.session_state.page == "login" and st.session_state.user is None:
             st.error("Email atau password salah!")
 
     # Tombol daftar merah
+    # Kita tidak bisa menerapkan .btn-register langsung ke st.button,
+    # jadi kita gunakan CSS selector untuk st.button terakhir (karena tombol Login sudah yang pertama)
     if st.button("Daftar Akun Baru", key="goto_register"):
         st.session_state.page = "register"
-
-    st.markdown('</div>', unsafe_allow_html=True)
+    
+    st.markdown('</div>', unsafe_allow_html=True) # Tutup login-box
+    st.markdown('</div>', unsafe_allow_html=True) # Tutup center-container
 
 # ---------------- REGISTER PAGE ----------------
 elif st.session_state.page == "register" and st.session_state.user is None:
