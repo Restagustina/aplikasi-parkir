@@ -1,5 +1,6 @@
 import streamlit as st
 import firebase_admin
+# Mengembalikan impor ke format yang lebih standar
 from firebase_admin import credentials, firestore, storage 
 import qrcode
 import tempfile
@@ -14,8 +15,7 @@ try:
     cred = credentials.Certificate(dict(st.secrets["firebase"]))
     if not firebase_admin._apps:
         firebase_admin.initialize_app(cred, {
-            # SOLUSI ERROR 404: Ganti dengan ID Proyek saja, bukan URL lengkap
-            "storageBucket": "parkir-digital" 
+            "storageBucket": "parkir-digital.appspot.com"
         })
     db = firestore.client()
     bucket = storage.bucket()
@@ -42,53 +42,6 @@ def log_activity(user_id, action):
 @st.cache_data
 def convert_df_to_csv(df):
     return df.to_csv(index=False).encode('utf-8')
-
-# --- FUNGSI QR CODE BARU ---
-def generate_and_store_qr(user_id, nim):
-    """
-    Membuat QR Code dengan data User ID, mengupload ke Storage,
-    dan menyimpan URL-nya di dokumen pengguna.
-    """
-    if not bucket or not db:
-        st.error("Koneksi Firebase gagal, QR Code tidak dapat dibuat.")
-        return None
-        
-    # 1. Tentukan Data QR (gunakan User ID)
-    qr_data = f"USER_ID:{user_id}" 
-    filename = f"qr_user_{nim}.png"
-    tmp_dir = tempfile.gettempdir()
-    qr_path = os.path.join(tmp_dir, filename)
-
-    try:
-        # 2. Generate dan Simpan QR Code di lokal temp
-        img = qrcode.make(qr_data)
-        img.save(qr_path)
-        
-        # 3. Upload ke Firebase Storage
-        qr_url = upload_to_storage(qr_path, f"qr_identitas/{filename}")
-        
-        if qr_url:
-            # 4. Simpan URL QR di dokumen user Firestore
-            user_ref = db.collection("users").document(user_id)
-            user_ref.update({"qr_identitas_url": qr_url})
-            
-            # 5. Update session state (agar tampilan diperbarui)
-            st.session_state.user['qr_identitas_url'] = qr_url
-            
-            # 6. PENTING: Memicu rerun agar QR Code langsung ditampilkan
-            st.rerun()
-            return qr_url
-        else:
-            return None
-    except Exception as e:
-        # Pastikan Anda menguji dulu apakah solusi 404 berhasil
-        st.error(f"Gagal memproses QR Code: {e}")
-        return None
-    finally:
-        # Bersihkan file temp lokal
-        if os.path.exists(qr_path):
-            os.remove(qr_path)
-
 
 # --- FUNGSI UTAMA (MENGGUNAKAN SORTING PYTHON) ---
 
@@ -130,8 +83,7 @@ def register_user(nama, nim, email, password):
             "email": email,
             "password_hash": hashed_password,
             "role": "user",
-            "created_at": firestore.SERVER_TIMESTAMP,
-            "qr_identitas_url": "" # Tambahkan field kosong untuk QR
+            "created_at": firestore.SERVER_TIMESTAMP
         })
         return doc_ref[1].id
     return None
@@ -173,7 +125,6 @@ def get_user_vehicles(user_id):
         return [veh.to_dict() for veh in vehicles_ref]
     return []
 
-
 # ---------------- STREAMLIT APP ----------------
 st.set_page_config(page_title="Digital ID Parkir Mahasiswa", page_icon="🅿️", layout="wide")
 
@@ -189,7 +140,9 @@ if "page" not in st.session_state:
 
 def get_base64(bin_file):
     if not os.path.exists(bin_file):
+        # Handle the case where the image file is not found
         st.error(f"File gambar '{bin_file}' tidak ditemukan.")
+        # Return a simple 1x1 transparent PNG base64 string to prevent other errors
         return "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
 
     with open(bin_file, 'rb') as f:
@@ -209,6 +162,7 @@ def set_background(image_file):
             position: relative;
         }}
 
+        /* Overlay buram */
         [data-testid="stAppViewContainer"]::before {{
             content: "";
             position: absolute;
@@ -216,11 +170,12 @@ def set_background(image_file):
             right: 0;
             bottom: 0;
             left: 0;
-            background: rgba(0, 0, 0, 0.5); 
-            backdrop-filter: blur(8px);    
+            background: rgba(0, 0, 0, 0.5); /* Layer transparan */
+            backdrop-filter: blur(8px);    /* Efek buram */
             z-index: 0;
         }}
 
+        /* Pastikan konten di atas overlay */
         [data-testid="stAppViewContainer"] > * {{
             position: relative;
             z-index: 1;
@@ -233,6 +188,7 @@ def set_background(image_file):
         '''
         st.markdown(page_bg_img, unsafe_allow_html=True)
     except Exception as e:
+        # Menangkap error dari get_base64 jika file tidak ditemukan
         st.warning(f"PERINGATAN: Latar belakang tidak diterapkan. Error detail: {e}")
 
 # PANGGIL FUNGSI LATAR BELAKANG DI SINI
@@ -242,48 +198,83 @@ set_background('BG FASILKOM.jpg')
 if st.session_state.page == "login" and st.session_state.user is None:
     st.markdown("""
     <style>
-    /* ... (CSS tetap sama) ... */
+    /* 1. CSS untuk menengahkan kontainer utama Streamlit */
     [data-testid="stAppViewContainer"] > .main {
         display: flex;
-        justify-content: center; 
-        align-items: center; 
+        justify-content: center; /* Horizontally center */
+        align-items: center; /* Vertically center */
         padding: 0 !important; 
         min-height: 100vh;
     }
+
+    /* 2. Style untuk Kotak Login */
     [data-testid="stForm"] {
-        background-color: rgba(255, 255, 255, 0.95); 
+        background-color: rgba(255, 255, 255, 0.95); /* Kotak putih di tengah */
         padding: 30px;
         border-radius: 15px;
         box-shadow: 0 10px 40px rgba(0,0,0,0.3); 
-        max-width: 450px; 
+        max-width: 450px; /* Lebar Kotak Login */
         width: 100%; 
         margin: auto;
     }
+    
+    /* 3. Perbaikan Input: Input dan tombol di dalam form harus mengisi 100% dari box */
+    [data-testid="stForm"] div[data-testid="stTextInput"],
+    [data-testid="stForm"] div[data-testid="stTextInput"] > div {
+        max-width: 100%; 
+        width: 100%;
+    }
+    
+    /* Styling Tombol di dalam Form (Form hanya memiliki satu tombol, tombol Submit) */
+    [data-testid="stForm"] div.stButton > button { 
+        width: 100%;
+        margin-top: 15px;
+    }
+
+    /* Judul di dalam box */
+    [data-testid="stForm"] h3 {
+        text-align: left;
+        margin-bottom: 20px;
+        color: #333;
+    }
+
+    /* Streamlit input custom style */
+    div[data-testid="stTextInput"] > div > div > input {
+        border-radius: 8px;
+        border: 1px solid #ccc;
+    }
+    
+    /* Tombol Daftar Akun Baru (SEKARANG DI LUAR FORM) */
     div.stButton:last-of-type > button { 
         background-color:#ff4b4b; 
         color:white; 
         border-radius:10px; 
         border:none; 
         width: 100%; 
-        max-width: 450px; 
+        max-width: 450px; /* Batasi lebarnya sama dengan form */
         margin-top: 10px;
     }
+
     .main .block-container {
         padding-top: 0;
     }
+    
     </style>
     """, unsafe_allow_html=True)
     
     st.empty() 
     
+    # --- FORM (KOTAK LOGIN TUNGGAL) ---
     with st.form("login_form", clear_on_submit=False):
         st.markdown("### 🔑 Login Pengguna") 
 
         email = st.text_input("Email", key="login_email")
         password = st.text_input("Password", type="password", key="login_password")
 
+        # Tombol Login (ini adalah tombol submit form)
         submitted = st.form_submit_button("Login")
 
+        # Logika Login HANYA berjalan ketika tombol submit form diklik (termasuk menekan ENTER)
         if submitted:
             if db:
                 users = db.collection("users").where("email", "==", email).stream()
@@ -302,6 +293,7 @@ if st.session_state.page == "login" and st.session_state.user is None:
             else:
                 st.error("Koneksi ke database gagal.")
 
+    # Tombol Daftar Akun Baru (Diletakkan di luar form, tapi tepat di bawahnya)
     if st.button("Daftar Akun Baru", key="goto_register"):
         st.session_state.page = "register"
         st.rerun() 
@@ -338,9 +330,7 @@ elif st.session_state.page == "register" and st.session_state.user is None:
 # ---------------- APP UTAMA ----------------
 elif st.session_state.user:
     st.sidebar.title("Menu")
-    # Ganti menu 'Tampilkan QR Code' menjadi 'ID Digital (QR Code)'
-    menu = st.sidebar.selectbox("", ["Profil", "ID Digital (QR Code)", "Daftar Kendaraan", "Lihat Data Kendaraan"])
-    
+    menu = st.sidebar.selectbox("", ["Profil", "Daftar Kendaraan", "Lihat Data Kendaraan"])
     if st.sidebar.button("Logout"):
         log_activity(st.session_state.user['uid'], "logout")
         st.session_state.user = None
@@ -350,26 +340,13 @@ elif st.session_state.user:
     user_id = st.session_state.user['uid']
     st.success(f"Selamat datang, {st.session_state.user['nama']}!")
 
-    # ------------------ LOGIKA GENERATE QR OTOMATIS ------------------
-    # Cek apakah QR URL sudah ada di session state. Jika kosong, buat.
-    if 'qr_identitas_url' not in st.session_state.user or st.session_state.user.get('qr_identitas_url') == "":
-        with st.spinner('Sistem sedang membuat ID Digital (QR Code) Anda secara otomatis...'):
-             generate_and_store_qr(
-                user_id=user_id,
-                nim=st.session_state.user['nim']
-             )
-        # Jika generate_and_store_qr berhasil, ia sudah memanggil st.rerun()
-        # Jika gagal (misalnya karena 404), error akan ditampilkan.
-    # ------------------------------------------------------------------
-
     # ---------- PROFIL ----------
     if menu == "Profil":
         st.header("Profil Pengguna")
         st.write(f"Nama: {st.session_state.user['nama']}")
         st.write(f"NIM: {st.session_state.user['nim']}")
         st.write(f"Email: {st.session_state.user['email']}")
-        
-        # LOG AKTIVITAS (Menggunakan try-except untuk mengatasi Error Timestamp)
+
         st.subheader("Log Aktivitas (100 Terbaru)")
         logs = get_user_logs(user_id) 
         
@@ -377,12 +354,15 @@ elif st.session_state.user:
             processed_logs = []
             for l in logs:
                 try:
+                    # OPSI FINAL: Coba format langsung. Gunakan try-except untuk menangani kegagalan.
+                    # Asumsi bahwa l['timestamp'] adalah objek Timestamp atau None/string lain.
                     ts_obj = l.get('timestamp')
                     if ts_obj:
                         ts_str = ts_obj.strftime("%d-%m-%Y %H:%M:%S")
                     else:
                         ts_str = "Tanggal tidak tersedia"
                 except AttributeError:
+                    # Jika gagal (misalnya, jika ts_obj adalah string atau tipe data lain yang tidak memiliki .strftime)
                     ts_str = "Error Konversi Waktu"
                 except Exception:
                     ts_str = "Data Waktu Rusak"
@@ -409,23 +389,6 @@ elif st.session_state.user:
         else:
             st.info("Belum ada aktivitas login/logout.")
 
-    # ---------- ID DIGITAL (QR CODE) ----------
-    elif menu == "ID Digital (QR Code)":
-        st.header("ID Digital Parkir")
-        qr_url = st.session_state.user.get('qr_identitas_url')
-
-        if qr_url and qr_url != "":
-            st.success("ID Digital Anda siap digunakan.")
-            st.image(qr_url, caption="QR Code Identitas Parkir", width=300)
-            
-            # Tombol download
-            st.markdown(f'<a href="{qr_url}" download="qr_identitas_{st.session_state.user["nim"]}.png" target="_blank"><button style="background-color: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer;">Download QR Code</button></a>', unsafe_allow_html=True)
-            
-        else:
-            st.warning("QR Code Anda sedang dalam proses pembuatan. Jika status ini berlanjut, mohon periksa konfigurasi Firebase Storage Anda.")
-            # Dalam mode otomatis ini, kita tidak perlu tombol generate manual
-            # karena sudah ditangani di atas.
-
     # ---------- DAFTAR KENDARAAN ----------
     elif menu == "Daftar Kendaraan":
         st.header("Form Pendaftaran Kendaraan")
@@ -438,12 +401,15 @@ elif st.session_state.user:
         if st.button("Daftar Kendaraan"):
             if nama and nim and plat and jenis and foto:
                 tmp_dir = tempfile.gettempdir()
+                # Simpan foto ke temp file
                 tmp_foto_path = os.path.join(tmp_dir, f"{plat}_foto.png")
                 with open(tmp_foto_path, "wb") as f:
                     f.write(foto.getbuffer())
                 
+                # Upload foto
                 foto_url = upload_to_storage(tmp_foto_path, f"foto/{plat}.png")
 
+                # Buat dan simpan QR Code
                 qr_data = f"{nama}-{nim}-{plat}"
                 qr_filename = os.path.join(tmp_dir, f"qr_{plat}.png")
                 img = qrcode.make(qr_data)
@@ -451,19 +417,21 @@ elif st.session_state.user:
                 qr_url = upload_to_storage(qr_filename, f"qr/{qr_filename}")
 
                 if foto_url and qr_url:
+                    # Simpan data ke Firestore
                     save_data_firestore(user_id, nama, nim, plat, jenis, foto_url, qr_url)
+
                     st.success("✅ Data kendaraan berhasil disimpan!")
                     st.image(qr_filename, caption="QR Code Parkir Anda")
                 else:
                     st.error("Gagal mengupload file ke Storage!")
 
+                # Bersihkan file lokal
                 if os.path.exists(tmp_foto_path):
                     os.remove(tmp_foto_path)
                 if os.path.exists(qr_filename):
                     os.remove(qr_filename)
             else:
                 st.error("⚠️ Lengkapi semua data dan upload foto kendaraan.")
-
 
     # ---------- LIHAT DATA KENDARAAN ----------
     elif menu == "Lihat Data Kendaraan":
