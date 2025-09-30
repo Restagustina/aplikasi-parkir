@@ -14,7 +14,8 @@ try:
     cred = credentials.Certificate(dict(st.secrets["firebase"]))
     if not firebase_admin._apps:
         firebase_admin.initialize_app(cred, {
-            "storageBucket": "parkir-digital.appspot.com"
+            # SOLUSI ERROR 404: Ganti dengan ID Proyek saja, bukan URL lengkap
+            "storageBucket": "parkir-digital" 
         })
     db = firestore.client()
     bucket = storage.bucket()
@@ -74,10 +75,13 @@ def generate_and_store_qr(user_id, nim):
             # 5. Update session state (agar tampilan diperbarui)
             st.session_state.user['qr_identitas_url'] = qr_url
             
+            # 6. PENTING: Memicu rerun agar QR Code langsung ditampilkan
+            st.rerun()
             return qr_url
         else:
             return None
     except Exception as e:
+        # Pastikan Anda menguji dulu apakah solusi 404 berhasil
         st.error(f"Gagal memproses QR Code: {e}")
         return None
     finally:
@@ -111,7 +115,6 @@ def get_user_logs(user_id):
     return []
 
 # --- FUNGSI FIREBASE LAIN ---
-# ... (FUNGSI upload_to_storage, save_data_firestore, get_user_vehicles, register_user tetap sama)
 
 def register_user(nama, nim, email, password):
     """Mendaftarkan pengguna baru ke Firestore."""
@@ -134,7 +137,6 @@ def register_user(nama, nim, email, password):
     return None
 
 def upload_to_storage(local_path, destination_blob_name):
-    # ... (Fungsi ini tetap sama)
     """Mengunggah file ke Firebase Storage."""
     if bucket:
         try:
@@ -148,7 +150,6 @@ def upload_to_storage(local_path, destination_blob_name):
     return None
 
 def save_data_firestore(user_id, nama, nim, plat, jenis, foto_url, qr_url):
-    # ... (Fungsi ini tetap sama)
     """Menyimpan data kendaraan ke Firestore."""
     if db:
         db.collection("vehicles").add({
@@ -166,7 +167,6 @@ def save_data_firestore(user_id, nama, nim, plat, jenis, foto_url, qr_url):
     return False
 
 def get_user_vehicles(user_id):
-    # ... (Fungsi ini tetap sama)
     """Mengambil semua data kendaraan milik pengguna tertentu."""
     if db:
         vehicles_ref = db.collection("vehicles").where("user_id", "==", user_id).stream()
@@ -178,7 +178,6 @@ def get_user_vehicles(user_id):
 st.set_page_config(page_title="Digital ID Parkir Mahasiswa", page_icon="🅿️", layout="wide")
 
 # Session state
-# ... (Session state tetap sama)
 if "user" not in st.session_state:
     st.session_state.user = None
 if "page" not in st.session_state:
@@ -186,7 +185,8 @@ if "page" not in st.session_state:
 
 # --------------------------------------------------------------------------
 # --- FUNGSI & PANGGILAN BACKGROUND IMAGE ---
-# ... (Fungsi background image tetap sama)
+# --------------------------------------------------------------------------
+
 def get_base64(bin_file):
     if not os.path.exists(bin_file):
         st.error(f"File gambar '{bin_file}' tidak ditemukan.")
@@ -238,18 +238,15 @@ def set_background(image_file):
 # PANGGIL FUNGSI LATAR BELAKANG DI SINI
 set_background('BG FASILKOM.jpg')
 
-# ---------------- LOGIN PAGE & REGISTER PAGE (Tetap Sama) ----------------
-# ... (Blok kode LOGIN PAGE dan REGISTER PAGE tetap sama)
-
+# ---------------- LOGIN PAGE ----------------
 if st.session_state.page == "login" and st.session_state.user is None:
-    # ... (Login form and logic)
     st.markdown("""
     <style>
     /* ... (CSS tetap sama) ... */
     [data-testid="stAppViewContainer"] > .main {
         display: flex;
-        justify-content: center; /* Horizontally center */
-        align-items: center; /* Vertically center */
+        justify-content: center; 
+        align-items: center; 
         padding: 0 !important; 
         min-height: 100vh;
     }
@@ -311,6 +308,7 @@ if st.session_state.page == "login" and st.session_state.user is None:
     
     st.empty()
 
+# ---------------- REGISTER PAGE ----------------
 elif st.session_state.page == "register" and st.session_state.user is None:
     st.subheader("📝 Form Registrasi User Baru")
     reg_nama = st.text_input("Nama Lengkap", key="reg_nama")
@@ -340,7 +338,8 @@ elif st.session_state.page == "register" and st.session_state.user is None:
 # ---------------- APP UTAMA ----------------
 elif st.session_state.user:
     st.sidebar.title("Menu")
-    menu = st.sidebar.selectbox("", ["Profil", "Tampilkan QR Code", "Daftar Kendaraan", "Lihat Data Kendaraan"])
+    # Ganti menu 'Tampilkan QR Code' menjadi 'ID Digital (QR Code)'
+    menu = st.sidebar.selectbox("", ["Profil", "ID Digital (QR Code)", "Daftar Kendaraan", "Lihat Data Kendaraan"])
     
     if st.sidebar.button("Logout"):
         log_activity(st.session_state.user['uid'], "logout")
@@ -350,6 +349,18 @@ elif st.session_state.user:
 
     user_id = st.session_state.user['uid']
     st.success(f"Selamat datang, {st.session_state.user['nama']}!")
+
+    # ------------------ LOGIKA GENERATE QR OTOMATIS ------------------
+    # Cek apakah QR URL sudah ada di session state. Jika kosong, buat.
+    if 'qr_identitas_url' not in st.session_state.user or st.session_state.user.get('qr_identitas_url') == "":
+        with st.spinner('Sistem sedang membuat ID Digital (QR Code) Anda secara otomatis...'):
+             generate_and_store_qr(
+                user_id=user_id,
+                nim=st.session_state.user['nim']
+             )
+        # Jika generate_and_store_qr berhasil, ia sudah memanggil st.rerun()
+        # Jika gagal (misalnya karena 404), error akan ditampilkan.
+    # ------------------------------------------------------------------
 
     # ---------- PROFIL ----------
     if menu == "Profil":
@@ -398,40 +409,25 @@ elif st.session_state.user:
         else:
             st.info("Belum ada aktivitas login/logout.")
 
-    # ---------- TAMPILKAN QR CODE BARU ----------
-    elif menu == "Tampilkan QR Code":
-        st.header("Digital Identity QR Code")
+    # ---------- ID DIGITAL (QR CODE) ----------
+    elif menu == "ID Digital (QR Code)":
+        st.header("ID Digital Parkir")
         qr_url = st.session_state.user.get('qr_identitas_url')
 
         if qr_url and qr_url != "":
-            st.info("Ini adalah ID digital Anda. Silakan tunjukkan ini saat pemeriksaan.")
+            st.success("ID Digital Anda siap digunakan.")
             st.image(qr_url, caption="QR Code Identitas Parkir", width=300)
             
-            # Tambahkan tombol untuk download gambar QR
+            # Tombol download
             st.markdown(f'<a href="{qr_url}" download="qr_identitas_{st.session_state.user["nim"]}.png" target="_blank"><button style="background-color: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer;">Download QR Code</button></a>', unsafe_allow_html=True)
             
         else:
-            st.warning("Anda belum memiliki QR Code Identitas. Silakan buat QR Code.")
-            
-            # Tombol untuk generate QR Code
-            if st.button("Generate QR Code Sekarang"):
-                with st.spinner('Membuat dan menyimpan QR Code...'):
-                    new_qr_url = generate_and_store_qr(
-                        user_id=st.session_state.user['uid'],
-                        nim=st.session_state.user['nim']
-                    )
-                
-                if new_qr_url:
-                    st.success("QR Code berhasil dibuat dan disimpan!")
-                    # Memaksa rerun untuk menampilkan QR Code
-                    st.rerun() 
-                else:
-                    st.error("Gagal membuat QR Code.")
-
+            st.warning("QR Code Anda sedang dalam proses pembuatan. Jika status ini berlanjut, mohon periksa konfigurasi Firebase Storage Anda.")
+            # Dalam mode otomatis ini, kita tidak perlu tombol generate manual
+            # karena sudah ditangani di atas.
 
     # ---------- DAFTAR KENDARAAN ----------
     elif menu == "Daftar Kendaraan":
-        # ... (Blok kode DAFTAR KENDARAAN tetap sama)
         st.header("Form Pendaftaran Kendaraan")
         nama = st.text_input("Nama Lengkap", value=st.session_state.user['nama'])
         nim = st.text_input("NIM", value=st.session_state.user['nim'])
@@ -471,7 +467,6 @@ elif st.session_state.user:
 
     # ---------- LIHAT DATA KENDARAAN ----------
     elif menu == "Lihat Data Kendaraan":
-        # ... (Blok kode LIHAT DATA KENDARAAN tetap sama)
         st.header("Data Kendaraan Saya")
         data = get_user_vehicles(user_id) 
         if data:
