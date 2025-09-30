@@ -106,37 +106,41 @@ if st.session_state.page == "login" and st.session_state.user is None:
     st.markdown("""
     <style>
     /* 1. CSS untuk menengahkan kontainer utama Streamlit */
-    [data-testid="stAppViewContainer"] > .main {
-        display: flex;
-        justify-content: center; /* Horizontally center */
-        align-items: center; /* Vertically center */
-        padding: 0 !important; 
-        min-height: 100vh;
-    }
+    /* (Biarkan tetap sama) */
 
-    /* 2. Style untuk Kotak Login */
-    /* Kita menargetkan container yang dibuat oleh st.form (stForm) */
+    /* 2. Style untuk Kotak Login (Target: stForm) */
     [data-testid="stForm"] {
-        background-color: rgba(255, 255, 255, 0.95); /* Kotak putih di tengah */
+        /* (Biarkan tetap sama) */
+        background-color: rgba(255, 255, 255, 0.95);
         padding: 30px;
         border-radius: 15px;
         box-shadow: 0 10px 40px rgba(0,0,0,0.3); 
-        max-width: 450px; /* Lebar Kotak Login */
+        max-width: 450px; 
         width: 100%; 
         margin: auto;
     }
     
-    /* 3. Perbaikan Input: Input dan tombol di dalam form harus mengisi 100% dari box */
+    /* 3. Perbaikan Input (Agar tidak melebar) */
     [data-testid="stForm"] div[data-testid="stTextInput"],
     [data-testid="stForm"] div[data-testid="stTextInput"] > div {
         max-width: 100%; 
         width: 100%;
     }
     
-    /* Styling Tombol di dalam Form (Form hanya memiliki satu tombol, tombol Submit) */
-    [data-testid="stForm"] div.stButton > button { 
+    /* Tombol Login (Tombol Submit Form - PERTAMA) */
+    [data-testid="stForm"] div.stButton:nth-of-type(1) > button { 
         width: 100%;
         margin-top: 15px;
+    }
+
+    /* BARIS INI KODE BARU: Tombol Daftar Akun Baru (KEDUA di dalam form) */
+    [data-testid="stForm"] div.stButton:nth-of-type(2) > button { 
+        background-color:#ff4b4b; /* WARNA MERAH */
+        color:white; 
+        border-radius:10px; 
+        border:none; 
+        width: 100%; 
+        margin-top: 10px;
     }
 
     /* Judul di dalam box */
@@ -152,17 +156,9 @@ if st.session_state.page == "login" and st.session_state.user is None:
         border: 1px solid #ccc;
     }
     
-    /* Tombol Daftar Akun Baru (SEKARANG DI LUAR FORM) */
-    /* Kita menargetkan tombol 'Daftar' yang diletakkan persis di bawah form */
-    div.stButton:last-of-type > button { 
-        background-color:#ff4b4b; 
-        color:white; 
-        border-radius:10px; 
-        border:none; 
-        width: 100%; 
-        max-width: 450px; /* Batasi lebarnya sama dengan form */
-        margin-top: 10px;
-    }
+    /* HILANGKAN BLOK INI: Tombol Daftar Akun Baru (SEKARANG DI LUAR FORM) */
+    /* div.stButton:last-of-type > button { ... } */
+    /* Blok CSS ini tidak lagi dibutuhkan karena tombol sudah di dalam form */
 
     .main .block-container {
         padding-top: 0;
@@ -181,8 +177,11 @@ if st.session_state.page == "login" and st.session_state.user is None:
         email = st.text_input("Email", key="login_email")
         password = st.text_input("Password", type="password", key="login_password")
 
-        # Tombol Login (ini adalah tombol submit form)
+        # 1. Tombol Login (ini adalah tombol submit form)
         submitted = st.form_submit_button("Login")
+
+        # 2. Tombol Daftar Akun Baru (DIPINDAHKAN KE SINI, DI DALAM FORM)
+        daftar_clicked = st.button("Daftar Akun Baru", key="goto_register")
 
         # Logika Login HANYA berjalan ketika tombol submit form diklik
         if submitted:
@@ -202,9 +201,15 @@ if st.session_state.page == "login" and st.session_state.user is None:
             else:
                 st.error("Koneksi ke database gagal.")
 
-    # Tombol Daftar Akun Baru (Diletakkan di luar form, tapi tepat di bawahnya)
-    if st.button("Daftar Akun Baru", key="goto_register"):
-        st.session_state.page = "register"
+        # Logika Pindah Halaman Diletakkan di Luar Blok 'if submitted'
+        # Karena ini adalah tombol biasa, logikanya harus berada di tingkat ini
+        if daftar_clicked:
+            st.session_state.page = "register"
+            # st.experimental_rerun() // Opsional: Tambahkan ini jika perpindahan halaman tidak responsif
+
+    # HAPUS BLOK INI: Tombol Daftar Akun Baru (Diletakkan di luar form, tapi tepat di bawahnya)
+    # if st.button("Daftar Akun Baru", key="goto_register"):
+    #     st.session_state.page = "register"
     
     st.empty()
 
