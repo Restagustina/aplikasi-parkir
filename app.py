@@ -40,10 +40,17 @@ def log_activity(user_id, action):
         "timestamp": firestore.SERVER_TIMESTAMP
     })
 
+# def get_user_logs(user_id):
+#     docs = db.collection("log_activity").where("user_id", "==", user_id)\
+#         .order_by("timestamp", direction=firestore.Query.DESCENDING).stream()
+#     return [d.to_dict() for d in docs]
 def get_user_logs(user_id):
-    docs = db.collection("log_activity").where("user_id", "==", user_id)\
-        .order_by("timestamp", direction=firestore.Query.DESCENDING).stream()
-    return [d.to_dict() for d in docs]
+    docs = db.collection("log_activity").where("user_id", "==", user_id).stream()
+    logs = [d.to_dict() for d in docs]
+    # Sort manual berdasarkan timestamp descending
+    logs_sorted = sorted(logs, key=lambda x: x['timestamp'] or 0, reverse=True)
+    return logs_sorted
+    
 
 def save_data_firestore(user_id, nama, nim, plat, jenis, foto_url, qr_url):
     data = {
