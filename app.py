@@ -77,7 +77,7 @@ def set_background(image_file):
             bottom: 0;
             left: 0;
             background: rgba(0, 0, 0, 0.5); /* Layer transparan */
-            backdrop-filter: blur(8px);           /* Efek buram */
+            backdrop-filter: blur(6px);           /* Efek buram */
             z-index: 0;
         }}
 
