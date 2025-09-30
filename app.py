@@ -108,88 +108,92 @@ if st.session_state.page == "login" and st.session_state.user is None:
     /* 1. CSS untuk menengahkan kontainer utama Streamlit */
     [data-testid="stAppViewContainer"] > .main {
         display: flex;
-        justify-content: center; /* Horizontally center */
-        align-items: center; /* Vertically center */
+        justify-content: center;
+        align-items: center;
         padding: 0 !important; 
         min-height: 100vh;
     }
 
-    /* 2. Style untuk Kotak Login */
-    /* Kita menargetkan container yang dibuat oleh st.form (stForm) */
-    [data-testid="stForm"] {
-        background-color: rgba(255, 255, 255, 0.95); /* Kotak putih di tengah */
+    /* 2. Style untuk Kotak Login (Target: Login Container Kustom) */
+    /* Kita menargetkan div kustom yang dibuat oleh st.markdown */
+    .login-container-style {
+        background-color: rgba(255, 255, 255, 0.95);
         padding: 30px;
         border-radius: 15px;
         box-shadow: 0 10px 40px rgba(0,0,0,0.3); 
-        max-width: 450px; /* Lebar Kotak Login */
+        max-width: 450px; 
         width: 100%; 
         margin: auto;
     }
     
-    /* 3. Perbaikan Input: Input dan tombol di dalam form harus mengisi 100% dari box */
-    [data-testid="stForm"] div[data-testid="stTextInput"],
-    [data-testid="stForm"] div[data-testid="stTextInput"] > div {
+    /* 3. Perbaikan Input: Input harus mengisi 100% dari box */
+    /* Menargetkan input di dalam container kustom */
+    .login-container-style [data-testid="stTextInput"] {
         max-width: 100%; 
         width: 100%;
     }
     
-    /* Styling Tombol di dalam Form (Form hanya memiliki satu tombol, tombol Submit) */
-    [data-testid="stForm"] div.stButton > button { 
+    /* Style Tombol Login (st.button pertama di kolom) */
+    .login-container-style div.stButton:first-of-type > button { 
         width: 100%;
         margin-top: 15px;
     }
 
+    /* Style Tombol Daftar Akun Baru (st.button kedua di kolom) */
+    .login-container-style div.stButton:last-of-type > button { 
+        background-color:#ff4b4b; /* WARNA MERAH */
+        color:white; 
+        border-radius:6px; 
+        border:none; 
+        width: 100%;
+        margin-top: 15px; /* Sesuaikan agar sejajar dengan tombol Login */
+    }
+
     /* Judul di dalam box */
-    [data-testid="stForm"] h3 {
+    .login-container-style h3 {
         text-align: left;
         margin-bottom: 20px;
         color: #333;
     }
 
     /* Streamlit input custom style */
-    div[data-testid="stTextInput"] > div > div > input {
+    .login-container-style div[data-testid="stTextInput"] > div > div > input {
         border-radius: 8px;
         border: 1px solid #ccc;
     }
     
-    /* Tombol Daftar Akun Baru (SEKARANG DI LUAR FORM) */
-    /* Kita menargetkan tombol 'Daftar' yang diletakkan persis di bawah form */
-    div.stButton:last-of-type > button { 
-        background-color:#ff4b4b; 
-        color:white; 
-        border-radius:10px; 
-        border:none; 
-        width: 100%; 
-        max-width: 450px; /* Batasi lebarnya sama dengan form */
-        margin-top: 10px;
-    }
-
     .main .block-container {
         padding-top: 0;
     }
     
     </style>
     """, unsafe_allow_html=True)
-    
-    # st.empty() ditempatkan di luar form untuk memastikan centering bekerja sempurna
+
     st.empty() 
-    
-    # --- FORM (KOTAK LOGIN TUNGGAL) ---
-    with st.form("login_form", clear_on_submit=False):
+
+    # --- CONTAINER (KOTAK LOGIN TUNGGAL, Menggantikan st.form) ---
+    with st.container():
+        # Membungkus semua elemen dalam div kustom untuk styling
+        st.markdown('<div class="login-container-style">', unsafe_allow_html=True)
+        
         st.markdown("### 🔑 Login Pengguna") 
 
         email = st.text_input("Email", key="login_email")
         password = st.text_input("Password", type="password", key="login_password")
 
-        # Tombol Login (ini adalah tombol submit form)
-        submitted = st.form_submit_button("Login")
+        # Membuat 2 kolom untuk tombol
+        col1, col2 = st.columns(2)
+        
+        # Kolom 1: Tombol Login
+        with col1:
+            login_clicked = st.button("Login", key="btn_login")
+        
+        # Kolom 2: Tombol Daftar Akun Baru
+        with col2:
+            daftar_clicked = st.button("Daftar Akun Baru", key="goto_register")
 
-        #Tombol Daftar
-        submitted = st.form_submit_button(("Daftar Akun Baru", key="goto_register"):
-        st.session_state.page = "register"
-
-        # Logika Login HANYA berjalan ketika tombol submit form diklik
-        if submitted:
+        # Logika Login (Dipicu oleh login_clicked)
+        if login_clicked:
             if db:
                 users = db.collection("users").where("email", "==", email).stream()
                 user_found = False
@@ -200,11 +204,21 @@ if st.session_state.page == "login" and st.session_state.user is None:
                         log_activity(u.id, "login")
                         st.success(f"Selamat datang, {u_data.get('nama')}!")
                         user_found = True
+                        st.experimental_rerun()
                         break
                 if not user_found:
                     st.error("Email atau password salah!")
             else:
                 st.error("Koneksi ke database gagal.")
+
+        # Logika Pindah Halaman (Dipicu oleh daftar_clicked)
+        if daftar_clicked:
+            st.session_state.page = "register"
+            st.experimental_rerun()
+        
+        # Menutup div kustom
+        st.markdown('</div>', unsafe_allow_html=True)
+
     st.empty()
 
 # ---------------- REGISTER PAGE ----------------
