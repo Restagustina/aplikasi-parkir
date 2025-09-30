@@ -106,16 +106,17 @@ if st.session_state.page == "login" and st.session_state.user is None:
     st.markdown("""
     <style>
     /* 1. CSS untuk menengahkan kontainer utama Streamlit */
+    /* Ini menengahkan seluruh konten di laman */
     [data-testid="stAppViewContainer"] > .main {
         display: flex;
-        justify-content: center;
-        align-items: center;
+        justify-content: center; /* Horizontally center */
+        align-items: center; /* Vertically center */
         padding: 0 !important; 
         min-height: 100vh;
     }
-
+    
     /* 2. Style untuk Kotak Login (Target: Login Container Kustom) */
-    /* Kita menargetkan div kustom yang dibuat oleh st.markdown */
+    /* Ini mendefinisikan tampilan kotak putih */
     .login-container-style {
         background-color: rgba(255, 255, 255, 0.95);
         padding: 30px;
@@ -126,11 +127,11 @@ if st.session_state.page == "login" and st.session_state.user is None:
         margin: auto;
     }
     
-    /* 3. Perbaikan Input: Input harus mengisi 100% dari box */
-    /* Menargetkan input di dalam container kustom */
+    /* 3. Perbaikan Input: Input harus mengisi 100% dari lebar kolomnya */
     .login-container-style [data-testid="stTextInput"] {
         max-width: 100%; 
         width: 100%;
+        margin-bottom: 0.5rem; /* Tambahkan sedikit ruang di bawah input */
     }
     
     /* Style Tombol Login (st.button pertama di kolom) */
@@ -155,13 +156,8 @@ if st.session_state.page == "login" and st.session_state.user is None:
         margin-bottom: 20px;
         color: #333;
     }
-
-    /* Streamlit input custom style */
-    .login-container-style div[data-testid="stTextInput"] > div > div > input {
-        border-radius: 8px;
-        border: 1px solid #ccc;
-    }
     
+    /* Hapus padding atas pada main block Streamlit agar tidak mengganggu centering */
     .main .block-container {
         padding-top: 0;
     }
@@ -171,53 +167,53 @@ if st.session_state.page == "login" and st.session_state.user is None:
 
     st.empty() 
 
-    # --- CONTAINER (KOTAK LOGIN TUNGGAL, Menggantikan st.form) ---
-    with st.container():
-        # Membungkus semua elemen dalam div kustom untuk styling
-        st.markdown('<div class="login-container-style">', unsafe_allow_html=True)
-        
-        st.markdown("### 🔑 Login Pengguna") 
+    # --- KOTAK LOGIN DENGAN DIV KUSTOM (DIJAMIN DI TENGAH) ---
+    # Membuka div kustom
+    st.markdown('<div class="login-container-style">', unsafe_allow_html=True)
+    
+    # Elemen di dalam kotak
+    st.markdown("### 🔑 Login Pengguna") 
 
-        email = st.text_input("Email", key="login_email")
-        password = st.text_input("Password", type="password", key="login_password")
+    email = st.text_input("Email", key="login_email")
+    password = st.text_input("Password", type="password", key="login_password")
 
-        # Membuat 2 kolom untuk tombol
-        col1, col2 = st.columns(2)
-        
-        # Kolom 1: Tombol Login
-        with col1:
-            login_clicked = st.button("Login", key="btn_login")
-        
-        # Kolom 2: Tombol Daftar Akun Baru
-        with col2:
-            daftar_clicked = st.button("Daftar Akun Baru", key="goto_register")
+    # Membuat 2 kolom untuk tombol
+    col1, col2 = st.columns(2)
+    
+    # Kolom 1: Tombol Login
+    with col1:
+        login_clicked = st.button("Login", key="btn_login")
+    
+    # Kolom 2: Tombol Daftar Akun Baru
+    with col2:
+        daftar_clicked = st.button("Daftar Akun Baru", key="goto_register")
 
-        # Logika Login (Dipicu oleh login_clicked)
-        if login_clicked:
-            if db:
-                users = db.collection("users").where("email", "==", email).stream()
-                user_found = False
-                for u in users:
-                    u_data = u.to_dict()
-                    if u_data.get("password_hash") == hash_password(password):
-                        st.session_state.user = {"uid": u.id, **u_data}
-                        log_activity(u.id, "login")
-                        st.success(f"Selamat datang, {u_data.get('nama')}!")
-                        user_found = True
-                        st.experimental_rerun()
-                        break
-                if not user_found:
-                    st.error("Email atau password salah!")
-            else:
-                st.error("Koneksi ke database gagal.")
+    # Logika Login
+    if login_clicked:
+        if db:
+            users = db.collection("users").where("email", "==", email).stream()
+            user_found = False
+            for u in users:
+                u_data = u.to_dict()
+                if u_data.get("password_hash") == hash_password(password):
+                    st.session_state.user = {"uid": u.id, **u_data}
+                    log_activity(u.id, "login")
+                    st.success(f"Selamat datang, {u_data.get('nama')}!")
+                    user_found = True
+                    st.experimental_rerun()
+                    break
+            if not user_found:
+                st.error("Email atau password salah!")
+        else:
+            st.error("Koneksi ke database gagal.")
 
-        # Logika Pindah Halaman (Dipicu oleh daftar_clicked)
-        if daftar_clicked:
-            st.session_state.page = "register"
-            st.experimental_rerun()
-        
-        # Menutup div kustom
-        st.markdown('</div>', unsafe_allow_html=True)
+    # Logika Pindah Halaman
+    if daftar_clicked:
+        st.session_state.page = "register"
+        st.experimental_rerun()
+    
+    # Menutup div kustom
+    st.markdown('</div>', unsafe_allow_html=True)
 
     st.empty()
 
