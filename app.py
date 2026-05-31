@@ -333,136 +333,247 @@ elif st.session_state.page == "register" and st.session_state.user is None:
 elif st.session_state.user:
     user_data = st.session_state.user
     user_id = user_data['uid']
+    user_role = user_data.get('role', 'user')  # Mengambil role: admin / user
     
-    # Ambil role dari Firestore secara real-time (default ke 'user' jika tidak ada)
-    user_role = user_data.get('role', 'user')  
+    # --- INISIALISASI VARIABEL MONITOR (DARI KODE PERTAMA) ---
+    if 'monitor_html' not in st.session_state:
+        st.session_state.monitor_html = "<div style='background-color: #f1f3f5; color: #495057; padding: 20px; border-radius: 5px; text-align: center; height: 50vh; display: flex; flex-direction: column; justify-content: center;'><h1 style='font-size: 50px;'>🅿️ MONITOR GATE READY</h1><p style='font-size: 20px;'>Silakan lakukan scan QR Code pada kamera di bawah.</p></div>"
+    if 'monitor_display_time' not in st.session_state:
+        st.session_state.monitor_display_time = datetime.now() - timedelta(seconds=6)
+    if 'monitor_type' not in st.session_state:
+        st.session_state.monitor_type = 'default'
 
-    # --- PEMBERSIHAN TOMBOL STATIS ---
-    # Kode ini akan menyembunyikan tombol HTML/CSS tiruan di sebelah kiri jika masih muncul dari file CSS Anda
-    st.markdown("""
-        <style>
-        /* Menyembunyikan elemen kustom yang tidak berfungsi agar tidak membingungkan */
-        .sidebar .stButton, div[data-testid="stVerticalBlock"] > div:has(button:contains("Dashboard Utama")) {
-            display: none !important;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-
-    # --- MEMBUAT SIDEBAR ASLI STREAMLIT (BISA DIKLIK) ---
-    st.sidebar.image("https://cdn-icons-png.flaticon.com/512/1022/1022319.png", width=50) # Icon Dashboard
-    st.sidebar.title("Sistem Parkir Digital")
-    st.sidebar.markdown(f"👤 **{user_data['nama']}** ({user_role.upper()})")
+    # --- SIDEBAR MENU (PILIHAN NAVIGATION) ---
+    st.sidebar.title("🅿️ Parkir Digital")
+    st.sidebar.markdown(f"Login Sebagai: **{user_data['nama']}** ({user_role.upper()})")
     st.sidebar.markdown("---")
-
-    # Navigasi Menu berdasarkan Role (Admin vs User)
+    
     if user_role == "admin":
-        menu = st.sidebar.radio(
-            "Menu Admin",
-            ["Dashboard Utama", "Log Aktivitas Global"],
-            key="admin_navigation"
-        )
+        menu = st.sidebar.selectbox("Menu Admin", ["Dashboard Utama & Scanner", "Profil Pengguna"])
     else:
-        menu = st.sidebar.radio(
-            "Menu Mahasiswa",
-            ["Profil", "Daftar Kendaraan", "Lihat Data Kendaraan"],
-            key="user_navigation"
-        )
-    
+        menu = st.sidebar.selectbox("Menu Mahasiswa", ["Profil", "Daftar Kendaraan", "Lihat Data Kendaraan"])
+        
     st.sidebar.markdown("---")
-    # Tombol Logout Asli Streamlit
-    if st.sidebar.button("🚪 Keluar / Logout", use_container_width=True):
+    if st.sidebar.button("🚪 Logout / Keluar", use_container_width=True):
         log_activity(user_id, "logout")
         st.session_state.user = None
         st.session_state.page = "login"
-        st.rerun() 
+        st.rerun()
 
     # =========================================================================
-    # RENDER HALAMAN ADMIN
+    # TAMPILAN 1: DASHBOARD UTAMA ADMIN + KAMERA SCANNER + MONITOR GATE
     # =========================================================================
-    if user_role == "admin":
-        if menu == "Dashboard Utama":
-            st.header("📋 Dashboard Admin")
-            st.write("Daftar Pengguna Terdaftar dan Status Parkir:")
+    if user_role == "admin" and menu == "Dashboard Utama & Scanner":
+        st.header("📋 Dashboard Utama Petugas")
+        
+        # --- LOGIKA TIMER HITUNG MUNDUR (DARI KODE PERTAMA) ---
+        time_elapsed = datetime.now() - st.session_state.monitor_display_time
+        if st.session_state.monitor_type != 'default' and time_elapsed.total_seconds() >= 5:
+            # Kembalikan monitor ke tampilan stanby setelah 5 detik
+            st.session_state.monitor_html = "<div style='background-color: #f1f3f5; color: #495057; padding: 20px; border-radius: 5px; text-align: center; height: 50vh; display: flex; flex-direction: column; justify-content: center;'><h1 style='font-size: 50px;'>🅿️ MONITOR GATE READY</h1><p style='font-size: 20px;'>Silakan lakukan scan QR Code pada kamera di bawah.</p></div>"
+            st.session_state.monitor_type = 'default'
+            st.rerun()
+
+        # Tampilkan Kotak Monitor Elektronik atas Gerbang
+        st.markdown(st.session_state.monitor_html, unsafe_allow_html=True)
+        
+        # Jika status monitor sedang memproses teks sambutan, jalankan simulasi hitung mundur
+        if st.session_state.monitor_type != 'default' and time_elapsed.total_seconds() < 5:
+            time_left = 5 - int(time_elapsed.total_seconds())
+            st.caption(f"⏳ Layar monitor kembali normal dalam {time_left} detik...")
+            time.sleep(1)
+            st.rerun()
             
+        st.markdown("---")
+        
+        # --- FITUR SCANNER / KAMERA INPUT ---
+        st.subheader("📸 Kamera Scanner Masuk / Keluar")
+        scan_input = st.text_input("Simulasi Scan QR Code (Ketik/Gunakan Scanner Barcode di sini):", key="scanner_field").strip()
+        
+        if st.button("Proses Scan QR", type="primary", use_container_width=True) and scan_input:
             if db:
                 try:
-                    vehicles_ref = db.collection("vehicles").stream()
-                    vehicles_list = []
-                    for v in vehicles_ref:
-                        v_data = v.to_dict()
-                        vehicles_list.append({
-                            "User ID": v_data.get("user_id", "-"),
-                            "Nama": v_data.get("nama", "-"),
-                            "Plat Nomor": v_data.get("plat", "-"),
-                            "Status": v_data.get("status", "OUT"),
-                            "Time In": v_data.get("time_in", "-"),
-                            "Time Out": v_data.get("time_out", "-"),
-                            "Duration": v_data.get("duration", "-")
-                        })
-                    
-                    if vehicles_list:
-                        df_admin = pd.DataFrame(vehicles_list)
-                        st.dataframe(df_admin, use_container_width=True)
+                    # Pecah data QR (Format pendaftaran: nama-nim-plat)
+                    qr_parts = scan_input.split('-')
+                    if len(qr_parts) >= 3:
+                        target_plat = qr_parts[2]
                     else:
-                        st.info("Belum ada data kendaraan di database.")
-                except Exception as e:
-                    st.error(f"Gagal mengambil data admin dari Firestore: {e}")
-            
-        elif menu == "Log Aktivitas Global":
-            st.header("📜 Log Aktivitas Seluruh Pengguna")
-            st.info("Halaman log global berhasil diakses.")
-
-    # =========================================================================
-    # RENDER HALAMAN USER BIASA (MAHASISWA)
-    # =========================================================================
-    else:
-        if menu == "Profil":
-            st.header("Profil Pengguna")
-            st.write(f"Nama: {user_data['nama']}")
-            st.write(f"NIM: {user_data['nim']}")
-            st.write(f"Email: {user_data['email']}")
-
-            st.subheader("Log Aktivitas (100 Terbaru)")
-            logs = get_user_logs(user_id) 
-            if logs:
-                processed_logs = []
-                for l in logs:
-                    try:
-                        ts_obj = l.get('timestamp')
-                        ts_str = ts_obj.strftime("%d-%m-%Y %H:%M:%S") if ts_obj else "Tanggal tidak tersedia"
-                    except:
-                        ts_str = "Error Konversi Waktu"
+                        target_plat = scan_input # jika yang di-scan langsung plat nomornya
                     
-                    processed_logs.append({
-                        "Aktivitas": l.get('action', 'N/A').capitalize(),
-                        "Waktu": ts_str
+                    # Cari kendaraan berdasarkan plat nomor di Firebase
+                    v_query = list(db.collection("vehicles").where("plat", "==", target_plat).limit(1).get())
+                    
+                    if v_query:
+                        doc = v_query[0]
+                        v_data = doc.to_dict()
+                        current_status = v_data.get("status", "OUT")
+                        driver_name = v_data.get("nama", "Pengguna")
+                        
+                        now_time = datetime.now()
+                        
+                        if current_status == "OUT" or current_status == "pending":
+                            # Aksi: MASUK KAMPUS
+                            db.collection("vehicles").document(doc.id).update({
+                                "status": "IN",
+                                "time_in": now_time,
+                                "time_out": None,
+                                "duration": ""
+                            })
+                            log_activity(v_data.get("user_id"), f"Masuk Parkir ({target_plat})")
+                            
+                            # Update visual monitor ke LAYAR HIJAU (Selamat Datang)
+                            st.session_state.monitor_html = f"<div style='background-color: #d4edda; color: #155724; padding: 40px; border-radius: 10px; text-align: center; min-height: 40vh; display: flex; flex-direction: column; justify-content: center;'><h1 style='font-size: 60px;'>✅ SELAMAT DATANG!</h1><p style='font-size: 35px; font-weight: bold;'>{driver_name}</p><p style='font-size: 25px;'>Plat Nomor: {target_plat} | Akses Diberikan</p></div>"
+                            st.session_state.monitor_type = 'IN'
+                            st.session_state.monitor_display_time = datetime.now()
+                            st.rerun()
+                            
+                        else:
+                            # Aksi: KELUAR KAMPUS
+                            time_in = v_data.get("time_in")
+                            duration_str = "Tidak Terdeteksi"
+                            if time_in:
+                                # Jika objek time_in dari Firebase berupa timestamp, ubah ke python datetime
+                                if hasattr(time_in, 'timestamp'):
+                                    time_in = datetime.fromtimestamp(time_in.timestamp())
+                                duration = now_time - time_in
+                                duration_str = str(duration).split('.')[0]
+                                
+                            db.collection("vehicles").document(doc.id).update({
+                                "status": "OUT",
+                                "time_out": now_time,
+                                "duration": duration_str
+                            })
+                            log_activity(v_data.get("user_id"), f"Keluar Parkir ({target_plat})")
+                            
+                            # Update visual monitor ke LAYAR KUNING (Selamat Jalan)
+                            st.session_state.monitor_html = f"<div style='background-color: #fff3cd; color: #856404; padding: 40px; border-radius: 10px; text-align: center; min-height: 40vh; display: flex; flex-direction: column; justify-content: center;'><h1 style='font-size: 60px;'>🚪 SAMPAI JUMPA LAGI</h1><p style='font-size: 35px; font-weight: bold;'>{driver_name}</p><p style='font-size: 25px;'>Durasi Parkir: {duration_str}</p></div>"
+                            st.session_state.monitor_type = 'OUT'
+                            st.session_state.monitor_display_time = datetime.now()
+                            st.rerun()
+                    else:
+                        # Layar Merah jika tidak terdaftar
+                        st.session_state.monitor_html = "<div style='background-color: #f8d7da; color: #721c24; padding: 40px; border-radius: 10px; text-align: center; min-height: 40vh; display: flex; flex-direction: column; justify-content: center;'><h1 style='font-size: 60px;'>❌ ERROR SECURE!</h1><p style='font-size: 30px; font-weight: bold;'>QR CODE / PLAT TIDAK TERDAFTAR</p></div>"
+                        st.session_state.monitor_type = 'ERROR'
+                        st.session_state.monitor_display_time = datetime.now()
+                        st.rerun()
+                        
+                except Exception as e:
+                    st.error(f"Gagal memproses pemicu scanner database: {e}")
+            else:
+                st.error("Koneksi Firebase Database terputus.")
+
+        # --- TABEL MONITOR DATA REAL-TIME ---
+        st.markdown("---")
+        st.subheader("📊 Tabel Status Kendaraan Real-Time")
+        if db:
+            try:
+                vehicles_ref = db.collection("vehicles").stream()
+                vehicles_list = []
+                for v in vehicles_ref:
+                    v_data = v.to_dict()
+                    
+                    # Formatting tanggal dari Firebase agar rapi di tabel Pandas
+                    t_in = v_data.get("time_in")
+                    t_out = v_data.get("time_out")
+                    t_in_str = t_in.strftime("%d-%m-%Y %H:%M:%S") if hasattr(t_in, 'strftime') else "-"
+                    t_out_str = t_out.strftime("%d-%m-%Y %H:%M:%S") if hasattr(t_out, 'strftime') else "-"
+                    
+                    vehicles_list.append({
+                        "Nama Pemilik": v_data.get("nama", "-"),
+                        "NIM": v_data.get("nim", "-"),
+                        "Plat Nomor": v_data.get("plat", "-"),
+                        "Jenis": v_data.get("jenis", "-"),
+                        "Status": "📍 DI DALAM" if v_data.get("status") == "IN" else "🚗 LUAR KAMPUS",
+                        "Waktu Masuk": t_in_str,
+                        "Waktu Keluar": t_out_str,
+                        "Durasi Terakhir": v_data.get("duration", "-")
                     })
                 
-                df_logs = pd.DataFrame(processed_logs)
-                st.dataframe(df_logs, use_container_width=True, hide_index=True)
-            else:
-                st.info("Belum ada aktivitas login/logout.")
-
-        elif menu == "Daftar Kendaraan":
-            st.header("Form Pendaftaran Kendaraan")
-            nama = st.text_input("Nama Lengkap", value=user_data['nama'])
-            nim = st.text_input("NIM", value=user_data['nim'])
-            plat = st.text_input("Plat Nomor")
-            jenis = st.selectbox("Jenis Kendaraan", ["Motor", "Mobil", "Lainnya"])
-            foto = st.file_uploader("Upload Foto Kendaraan", type=["jpg","jpeg","png"])
-
-            if st.button("Daftar Kendaraan"):
-                if nama and nim and plat and jenis and foto:
-                    st.success("✅ Data kendaraan berhasil diproses!")
+                if vehicles_list:
+                    st.dataframe(pd.DataFrame(vehicles_list), use_container_width=True)
                 else:
-                    st.error("⚠️ Lengkapi semua data terlebih dahulu.")
+                    st.info("Belum ada data kendaraan terdaftar di Firebase Cloud.")
+            except Exception as e:
+                st.error(f"Gagal memuat log tabel utama: {e}")
 
-        elif menu == "Lihat Data Kendaraan":
-            st.header("Data Kendaraan Saya")
-            data = get_user_vehicles(user_id) 
-            if data:
-                for d in data:
-                    st.subheader(f"{d['plat']} ({d['jenis']})")
-                    st.markdown("---")
+    # =========================================================================
+    # HALAMAN LAIN (PROFIL, DAFTAR KENDARAAN, LIHAT DATA)
+    # =========================================================================
+    elif menu == "Profil" or menu == "Profil Pengguna":
+        st.header("Profil Pengguna")
+        st.write(f"Nama: {user_data['nama']}")
+        st.write(f"NIM/NIP: {user_data['nim']}")
+        st.write(f"Email: {user_data['email']}")
+        
+        st.subheader("Log Aktivitas Akun")
+        logs = get_user_logs(user_id)
+        if logs:
+            processed_logs = []
+            for l in logs:
+                try:
+                    ts_obj = l.get('timestamp')
+                    ts_str = ts_obj.strftime("%d-%m-%Y %H:%M:%S") if ts_obj else "Waktu Tidak Tersedia"
+                except:
+                    ts_str = "Error Konversi"
+                processed_logs.append({"Aktivitas": l.get('action', 'N/A').capitalize(), "Waktu Log": ts_str})
+            st.dataframe(pd.DataFrame(processed_logs), use_container_width=True, hide_index=True)
+        else:
+            st.info("Belum ada riwayat log aktivitas.")
+
+    elif menu == "Daftar Kendaraan":
+        st.header("Form Pendaftaran Kendaraan Baru")
+        nama_k = st.text_input("Nama Lengkap", value=user_data['nama'], disabled=True)
+        nim_k = st.text_input("NIM", value=user_data['nim'], disabled=True)
+        plat = st.text_input("Masukkan Plat Nomor Kendaraan (Contoh: B1234XYZ)").upper().strip()
+        jenis = st.selectbox("Jenis Kendaraan", ["Motor", "Mobil", "Lainnya"])
+        foto = st.file_uploader("Upload Foto Fisik Kendaraan", type=["jpg","jpeg","png"])
+
+        if st.button("Daftar & Terbitkan Akses QR", type="primary"):
+            if plat and foto:
+                import tempfile
+                tmp_dir = tempfile.gettempdir()
+                
+                # Simpan berkas gambar sementara
+                tmp_foto_path = os.path.join(tmp_dir, f"{plat}_foto.png")
+                with open(tmp_foto_path, "wb") as f:
+                    f.write(foto.getbuffer())
+                
+                # Mengunggah data ke Storage Firebase Cloud
+                st.info("Sedang mendaftarkan berkas ke cloud...")
+                foto_url = upload_to_storage(tmp_foto_path, f"foto/{plat}.png")
+
+                # Membangun QR Code Otomatis
+                qr_data = f"{user_data['nama']}-{user_data['nim']}-{plat}"
+                qr_filename = os.path.join(tmp_dir, f"qr_{plat}.png")
+                img = qrcode.make(qr_data)
+                img.save(qr_filename)
+                qr_url = upload_to_storage(qr_filename, f"qr/{plat}.png")
+
+                if foto_url and qr_url:
+                    save_data_firestore(user_id, user_data['nama'], user_data['nim'], plat, jenis, foto_url, qr_url)
+                    st.success(f"✅ Registrasi sukses! Plat {plat} siap digunakan.")
+                    st.image(qr_filename, caption="Gunakan QR Code ini untuk scan di gerbang.")
+                else:
+                    st.error("Gagal melakukan upload berkas.")
+                    
+                if os.path.exists(tmp_foto_path): os.remove(tmp_foto_path)
+                if os.path.exists(qr_filename): os.remove(qr_filename)
             else:
-                st.info("Belum ada data kendaraan yang terdaftar.")
+                st.error("Mohon isi nomor plat kendaraan dan lampirkan foto fisik.")
+
+    elif menu == "Lihat Data Kendaraan":
+        st.header("Kartu Identitas Parkir Saya")
+        data = get_user_vehicles(user_id)
+        if data:
+            for d in data:
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.subheader(f"🏷️ Plat: {d['plat']}")
+                    st.write(f"Jenis: {d['jenis']}")
+                    st.write(f"Status Saat Ini: {d.get('status', 'OUT')}")
+                    st.image(d["qr_url"], caption="QR Code Scan Akses", width=200)
+                with col2:
+                    st.image(d["foto_url"], caption="Foto Fisik Kendaraan", width=250)
+                st.markdown("---")
+        else:
+            st.info("Anda belum mendaftarkan kendaraan apa pun.")
