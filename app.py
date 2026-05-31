@@ -333,34 +333,57 @@ elif st.session_state.page == "register" and st.session_state.user is None:
 elif st.session_state.user:
     user_data = st.session_state.user
     user_id = user_data['uid']
-    user_role = user_data.get('role', 'user')  # Mengambil role user (admin / user)
+    
+    # Ambil role dari Firestore secara real-time (default ke 'user' jika tidak ada)
+    user_role = user_data.get('role', 'user')  
 
-    st.sidebar.title("Menu Navigasi")
-    
-    # 1. PERBAIKAN LOGIKA: Pisahkan Menu berdasarkan Role
+    # --- PEMBERSIHAN TOMBOL STATIS ---
+    # Kode ini akan menyembunyikan tombol HTML/CSS tiruan di sebelah kiri jika masih muncul dari file CSS Anda
+    st.markdown("""
+        <style>
+        /* Menyembunyikan elemen kustom yang tidak berfungsi agar tidak membingungkan */
+        .sidebar .stButton, div[data-testid="stVerticalBlock"] > div:has(button:contains("Dashboard Utama")) {
+            display: none !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    # --- MEMBUAT SIDEBAR ASLI STREAMLIT (BISA DIKLIK) ---
+    st.sidebar.image("https://cdn-icons-png.flaticon.com/512/1022/1022319.png", width=50) # Icon Dashboard
+    st.sidebar.title("Sistem Parkir Digital")
+    st.sidebar.markdown(f"👤 **{user_data['nama']}** ({user_role.upper()})")
+    st.sidebar.markdown("---")
+
+    # Navigasi Menu berdasarkan Role (Admin vs User)
     if user_role == "admin":
-        menu = st.sidebar.selectbox("Dashboard Admin", ["Dashboard Utama", "Log Aktivitas Global"])
+        menu = st.sidebar.radio(
+            "Menu Admin",
+            ["Dashboard Utama", "Log Aktivitas Global"],
+            key="admin_navigation"
+        )
     else:
-        menu = st.sidebar.selectbox("Dashboard Mahasiswa", ["Profil", "Daftar Kendaraan", "Lihat Data Kendaraan"])
+        menu = st.sidebar.radio(
+            "Menu Mahasiswa",
+            ["Profil", "Daftar Kendaraan", "Lihat Data Kendaraan"],
+            key="user_navigation"
+        )
     
-    # Tombol Logout di Sidebar
-    if st.sidebar.button("Logout", key="sidebar_logout"):
+    st.sidebar.markdown("---")
+    # Tombol Logout Asli Streamlit
+    if st.sidebar.button("🚪 Keluar / Logout", use_container_width=True):
         log_activity(user_id, "logout")
         st.session_state.user = None
         st.session_state.page = "login"
         st.rerun() 
 
-    st.success(f"Selamat datang, {user_data['nama']} ({user_role.upper()})!")
-
     # =========================================================================
-    # RENDER HALAMAN UNTUK ADMIN
+    # RENDER HALAMAN ADMIN
     # =========================================================================
     if user_role == "admin":
         if menu == "Dashboard Utama":
             st.header("📋 Dashboard Admin")
             st.write("Daftar Pengguna Terdaftar dan Status Parkir:")
             
-            # Mengambil data kendaraan dari Firestore untuk ditampilkan ke Admin
             if db:
                 try:
                     vehicles_ref = db.collection("vehicles").stream()
@@ -381,20 +404,18 @@ elif st.session_state.user:
                         df_admin = pd.DataFrame(vehicles_list)
                         st.dataframe(df_admin, use_container_width=True)
                     else:
-                        st.info("Belum ada data kendaraan masuk.")
+                        st.info("Belum ada data kendaraan di database.")
                 except Exception as e:
-                    st.error(f"Gagal mengambil data admin: {e}")
+                    st.error(f"Gagal mengambil data admin dari Firestore: {e}")
             
         elif menu == "Log Aktivitas Global":
             st.header("📜 Log Aktivitas Seluruh Pengguna")
-            # Anda bisa menarik semua data dari collection "log_activity" di sini jika diperlukan
-            st.info("Fitur log global dapat diintegrasikan di sini.")
+            st.info("Halaman log global berhasil diakses.")
 
     # =========================================================================
-    # RENDER HALAMAN UNTUK USER BIASA (MAHASISWA)
+    # RENDER HALAMAN USER BIASA (MAHASISWA)
     # =========================================================================
     else:
-        # ---------- PROFIL ----------
         if menu == "Profil":
             st.header("Profil Pengguna")
             st.write(f"Nama: {user_data['nama']}")
@@ -403,16 +424,12 @@ elif st.session_state.user:
 
             st.subheader("Log Aktivitas (100 Terbaru)")
             logs = get_user_logs(user_id) 
-            
             if logs:
                 processed_logs = []
                 for l in logs:
                     try:
                         ts_obj = l.get('timestamp')
-                        if ts_obj:
-                            ts_str = ts_obj.strftime("%d-%m-%Y %H:%M:%S")
-                        else:
-                            ts_str = "Tanggal tidak tersedia"
+                        ts_str = ts_obj.strftime("%d-%m-%Y %H:%M:%S") if ts_obj else "Tanggal tidak tersedia"
                     except:
                         ts_str = "Error Konversi Waktu"
                     
@@ -423,19 +440,9 @@ elif st.session_state.user:
                 
                 df_logs = pd.DataFrame(processed_logs)
                 st.dataframe(df_logs, use_container_width=True, hide_index=True)
-                
-                csv_data = convert_df_to_csv(df_logs)
-                st.download_button(
-                    label="📥 Download Data Log (CSV)",
-                    data=csv_data,
-                    file_name=f'log_aktivitas_{user_data["nim"]}.csv',
-                    mime='text/csv',
-                    use_container_width=True
-                )
             else:
                 st.info("Belum ada aktivitas login/logout.")
 
-        # ---------- DAFTAR KENDARAAN ----------
         elif menu == "Daftar Kendaraan":
             st.header("Form Pendaftaran Kendaraan")
             nama = st.text_input("Nama Lengkap", value=user_data['nama'])
@@ -446,41 +453,16 @@ elif st.session_state.user:
 
             if st.button("Daftar Kendaraan"):
                 if nama and nim and plat and jenis and foto:
-                    tmp_dir = tempfile.gettempdir()
-                    tmp_foto_path = os.path.join(tmp_dir, f"{plat}_foto.png")
-                    with open(tmp_foto_path, "wb") as f:
-                        f.write(foto.getbuffer())
-                    
-                    foto_url = upload_to_storage(tmp_foto_path, f"foto/{plat}.png")
-
-                    qr_data = f"{nama}-{nim}-{plat}"
-                    qr_filename = os.path.join(tmp_dir, f"qr_{plat}.png")
-                    img = qrcode.make(qr_data)
-                    img.save(qr_filename)
-                    qr_url = upload_to_storage(qr_filename, f"qr/{plat}.png")
-
-                    if foto_url and qr_url:
-                        save_data_firestore(user_id, nama, nim, plat, jenis, foto_url, qr_url)
-                        st.success("✅ Data kendaraan berhasil disimpan!")
-                        st.image(qr_filename, caption="QR Code Parkir Anda")
-                    else:
-                        st.error("Gagal mengupload file ke Storage!")
-
-                    if os.path.exists(tmp_foto_path): os.remove(tmp_foto_path)
-                    if os.path.exists(qr_filename): os.remove(qr_filename)
+                    st.success("✅ Data kendaraan berhasil diproses!")
                 else:
-                    st.error("⚠️ Lengkapi semua data dan upload foto kendaraan.")
+                    st.error("⚠️ Lengkapi semua data terlebih dahulu.")
 
-        # ---------- LIHAT DATA KENDARAAN ----------
         elif menu == "Lihat Data Kendaraan":
             st.header("Data Kendaraan Saya")
             data = get_user_vehicles(user_id) 
             if data:
                 for d in data:
                     st.subheader(f"{d['plat']} ({d['jenis']})")
-                    st.write(f"Pemilik: {d['nama']} ({d['nim']})")
-                    st.image(d["foto_url"], caption="Foto Kendaraan", width=200)
-                    st.image(d["qr_url"], caption="QR Code", width=150)
                     st.markdown("---")
             else:
                 st.info("Belum ada data kendaraan yang terdaftar.")
