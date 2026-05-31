@@ -331,120 +331,156 @@ elif st.session_state.page == "register" and st.session_state.user is None:
 
 # ---------------- APP UTAMA ----------------
 elif st.session_state.user:
-    st.sidebar.title("Menu")
-    menu = st.sidebar.selectbox("", ["Profil", "Daftar Kendaraan", "Lihat Data Kendaraan"])
-    if st.sidebar.button("Logout"):
-        log_activity(st.session_state.user['uid'], "logout")
+    user_data = st.session_state.user
+    user_id = user_data['uid']
+    user_role = user_data.get('role', 'user')  # Mengambil role user (admin / user)
+
+    st.sidebar.title("Menu Navigasi")
+    
+    # 1. PERBAIKAN LOGIKA: Pisahkan Menu berdasarkan Role
+    if user_role == "admin":
+        menu = st.sidebar.selectbox("Dashboard Admin", ["Dashboard Utama", "Log Aktivitas Global"])
+    else:
+        menu = st.sidebar.selectbox("Dashboard Mahasiswa", ["Profil", "Daftar Kendaraan", "Lihat Data Kendaraan"])
+    
+    # Tombol Logout di Sidebar
+    if st.sidebar.button("Logout", key="sidebar_logout"):
+        log_activity(user_id, "logout")
         st.session_state.user = None
         st.session_state.page = "login"
         st.rerun() 
 
-    user_id = st.session_state.user['uid']
-    st.success(f"Selamat datang, {st.session_state.user['nama']}!")
+    st.success(f"Selamat datang, {user_data['nama']} ({user_role.upper()})!")
 
-    # ---------- PROFIL ----------
-    if menu == "Profil":
-        st.header("Profil Pengguna")
-        st.write(f"Nama: {st.session_state.user['nama']}")
-        st.write(f"NIM: {st.session_state.user['nim']}")
-        st.write(f"Email: {st.session_state.user['email']}")
-
-        st.subheader("Log Aktivitas (100 Terbaru)")
-        logs = get_user_logs(user_id) 
-        
-        if logs:
-            processed_logs = []
-            for l in logs:
+    # =========================================================================
+    # RENDER HALAMAN UNTUK ADMIN
+    # =========================================================================
+    if user_role == "admin":
+        if menu == "Dashboard Utama":
+            st.header("📋 Dashboard Admin")
+            st.write("Daftar Pengguna Terdaftar dan Status Parkir:")
+            
+            # Mengambil data kendaraan dari Firestore untuk ditampilkan ke Admin
+            if db:
                 try:
-                    # OPSI FINAL: Coba format langsung. Gunakan try-except untuk menangani kegagalan.
-                    # Asumsi bahwa l['timestamp'] adalah objek Timestamp atau None/string lain.
-                    ts_obj = l.get('timestamp')
-                    if ts_obj:
-                        ts_str = ts_obj.strftime("%d-%m-%Y %H:%M:%S")
+                    vehicles_ref = db.collection("vehicles").stream()
+                    vehicles_list = []
+                    for v in vehicles_ref:
+                        v_data = v.to_dict()
+                        vehicles_list.append({
+                            "User ID": v_data.get("user_id", "-"),
+                            "Nama": v_data.get("nama", "-"),
+                            "Plat Nomor": v_data.get("plat", "-"),
+                            "Status": v_data.get("status", "OUT"),
+                            "Time In": v_data.get("time_in", "-"),
+                            "Time Out": v_data.get("time_out", "-"),
+                            "Duration": v_data.get("duration", "-")
+                        })
+                    
+                    if vehicles_list:
+                        df_admin = pd.DataFrame(vehicles_list)
+                        st.dataframe(df_admin, use_container_width=True)
                     else:
-                        ts_str = "Tanggal tidak tersedia"
-                except AttributeError:
-                    # Jika gagal (misalnya, jika ts_obj adalah string atau tipe data lain yang tidak memiliki .strftime)
-                    ts_str = "Error Konversi Waktu"
-                except Exception:
-                    ts_str = "Data Waktu Rusak"
+                        st.info("Belum ada data kendaraan masuk.")
+                except Exception as e:
+                    st.error(f"Gagal mengambil data admin: {e}")
+            
+        elif menu == "Log Aktivitas Global":
+            st.header("📜 Log Aktivitas Seluruh Pengguna")
+            # Anda bisa menarik semua data dari collection "log_activity" di sini jika diperlukan
+            st.info("Fitur log global dapat diintegrasikan di sini.")
+
+    # =========================================================================
+    # RENDER HALAMAN UNTUK USER BIASA (MAHASISWA)
+    # =========================================================================
+    else:
+        # ---------- PROFIL ----------
+        if menu == "Profil":
+            st.header("Profil Pengguna")
+            st.write(f"Nama: {user_data['nama']}")
+            st.write(f"NIM: {user_data['nim']}")
+            st.write(f"Email: {user_data['email']}")
+
+            st.subheader("Log Aktivitas (100 Terbaru)")
+            logs = get_user_logs(user_id) 
+            
+            if logs:
+                processed_logs = []
+                for l in logs:
+                    try:
+                        ts_obj = l.get('timestamp')
+                        if ts_obj:
+                            ts_str = ts_obj.strftime("%d-%m-%Y %H:%M:%S")
+                        else:
+                            ts_str = "Tanggal tidak tersedia"
+                    except:
+                        ts_str = "Error Konversi Waktu"
+                    
+                    processed_logs.append({
+                        "Aktivitas": l.get('action', 'N/A').capitalize(),
+                        "Waktu": ts_str
+                    })
                 
-                processed_logs.append({
-                    "Aktivitas": l.get('action', 'N/A').capitalize(),
-                    "Waktu": ts_str
-                })
-            
-            df_logs = pd.DataFrame(processed_logs)
-            
-            st.dataframe(df_logs, use_container_width=True, hide_index=True)
-            
-            csv_data = convert_df_to_csv(df_logs)
-            
-            st.download_button(
-                label="📥 Download Data Log (CSV)",
-                data=csv_data,
-                file_name=f'log_aktivitas_{st.session_state.user["nim"]}.csv',
-                mime='text/csv',
-                use_container_width=True
-            )
-            
-        else:
-            st.info("Belum ada aktivitas login/logout.")
-
-    # ---------- DAFTAR KENDARAAN ----------
-    elif menu == "Daftar Kendaraan":
-        st.header("Form Pendaftaran Kendaraan")
-        nama = st.text_input("Nama Lengkap", value=st.session_state.user['nama'])
-        nim = st.text_input("NIM", value=st.session_state.user['nim'])
-        plat = st.text_input("Plat Nomor")
-        jenis = st.selectbox("Jenis Kendaraan", ["Motor", "Mobil", "Lainnya"])
-        foto = st.file_uploader("Upload Foto Kendaraan", type=["jpg","jpeg","png"])
-
-        if st.button("Daftar Kendaraan"):
-            if nama and nim and plat and jenis and foto:
-                tmp_dir = tempfile.gettempdir()
-                # Simpan foto ke temp file
-                tmp_foto_path = os.path.join(tmp_dir, f"{plat}_foto.png")
-                with open(tmp_foto_path, "wb") as f:
-                    f.write(foto.getbuffer())
+                df_logs = pd.DataFrame(processed_logs)
+                st.dataframe(df_logs, use_container_width=True, hide_index=True)
                 
-                # Upload foto
-                foto_url = upload_to_storage(tmp_foto_path, f"foto/{plat}.png")
-
-                # Buat dan simpan QR Code
-                qr_data = f"{nama}-{nim}-{plat}"
-                qr_filename = os.path.join(tmp_dir, f"qr_{plat}.png")
-                img = qrcode.make(qr_data)
-                img.save(qr_filename)
-                qr_url = upload_to_storage(qr_filename, f"qr/{qr_filename}")
-
-                if foto_url and qr_url:
-                    # Simpan data ke Firestore
-                    save_data_firestore(user_id, nama, nim, plat, jenis, foto_url, qr_url)
-
-                    st.success("✅ Data kendaraan berhasil disimpan!")
-                    st.image(qr_filename, caption="QR Code Parkir Anda")
-                else:
-                    st.error("Gagal mengupload file ke Storage!")
-
-                # Bersihkan file lokal
-                if os.path.exists(tmp_foto_path):
-                    os.remove(tmp_foto_path)
-                if os.path.exists(qr_filename):
-                    os.remove(qr_filename)
+                csv_data = convert_df_to_csv(df_logs)
+                st.download_button(
+                    label="📥 Download Data Log (CSV)",
+                    data=csv_data,
+                    file_name=f'log_aktivitas_{user_data["nim"]}.csv',
+                    mime='text/csv',
+                    use_container_width=True
+                )
             else:
-                st.error("⚠️ Lengkapi semua data dan upload foto kendaraan.")
+                st.info("Belum ada aktivitas login/logout.")
 
-    # ---------- LIHAT DATA KENDARAAN ----------
-    elif menu == "Lihat Data Kendaraan":
-        st.header("Data Kendaraan Saya")
-        data = get_user_vehicles(user_id) 
-        if data:
-            for d in data:
-                st.subheader(f"{d['plat']} ({d['jenis']})")
-                st.write(f"Pemilik: {d['nama']} ({d['nim']})")
-                st.image(d["foto_url"], caption="Foto Kendaraan", width=200)
-                st.image(d["qr_url"], caption="QR Code", width=150)
-                st.markdown("---")
-        else:
-            st.info("Belum ada data kendaraan yang terdaftar.")
+        # ---------- DAFTAR KENDARAAN ----------
+        elif menu == "Daftar Kendaraan":
+            st.header("Form Pendaftaran Kendaraan")
+            nama = st.text_input("Nama Lengkap", value=user_data['nama'])
+            nim = st.text_input("NIM", value=user_data['nim'])
+            plat = st.text_input("Plat Nomor")
+            jenis = st.selectbox("Jenis Kendaraan", ["Motor", "Mobil", "Lainnya"])
+            foto = st.file_uploader("Upload Foto Kendaraan", type=["jpg","jpeg","png"])
+
+            if st.button("Daftar Kendaraan"):
+                if nama and nim and plat and jenis and foto:
+                    tmp_dir = tempfile.gettempdir()
+                    tmp_foto_path = os.path.join(tmp_dir, f"{plat}_foto.png")
+                    with open(tmp_foto_path, "wb") as f:
+                        f.write(foto.getbuffer())
+                    
+                    foto_url = upload_to_storage(tmp_foto_path, f"foto/{plat}.png")
+
+                    qr_data = f"{nama}-{nim}-{plat}"
+                    qr_filename = os.path.join(tmp_dir, f"qr_{plat}.png")
+                    img = qrcode.make(qr_data)
+                    img.save(qr_filename)
+                    qr_url = upload_to_storage(qr_filename, f"qr/{plat}.png")
+
+                    if foto_url and qr_url:
+                        save_data_firestore(user_id, nama, nim, plat, jenis, foto_url, qr_url)
+                        st.success("✅ Data kendaraan berhasil disimpan!")
+                        st.image(qr_filename, caption="QR Code Parkir Anda")
+                    else:
+                        st.error("Gagal mengupload file ke Storage!")
+
+                    if os.path.exists(tmp_foto_path): os.remove(tmp_foto_path)
+                    if os.path.exists(qr_filename): os.remove(qr_filename)
+                else:
+                    st.error("⚠️ Lengkapi semua data dan upload foto kendaraan.")
+
+        # ---------- LIHAT DATA KENDARAAN ----------
+        elif menu == "Lihat Data Kendaraan":
+            st.header("Data Kendaraan Saya")
+            data = get_user_vehicles(user_id) 
+            if data:
+                for d in data:
+                    st.subheader(f"{d['plat']} ({d['jenis']})")
+                    st.write(f"Pemilik: {d['nama']} ({d['nim']})")
+                    st.image(d["foto_url"], caption="Foto Kendaraan", width=200)
+                    st.image(d["qr_url"], caption="QR Code", width=150)
+                    st.markdown("---")
+            else:
+                st.info("Belum ada data kendaraan yang terdaftar.")
